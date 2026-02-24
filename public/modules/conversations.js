@@ -407,6 +407,11 @@ export function initStorageSync() {
       // 支持新的版本化格式 {version:1, data:[]} 和旧的裸数组格式
       let incoming;
       if (parsed && typeof parsed === "object" && "version" in parsed && "data" in parsed) {
+        // 版本不匹配时忽略同步,避免不兼容的数据覆盖当前状态
+        if (parsed.version !== 1) {
+          console.warn(`[initStorageSync] Ignoring incompatible cache version ${parsed.version}`);
+          return;
+        }
         incoming = parsed.data;
       } else if (Array.isArray(parsed)) {
         incoming = parsed; // 旧格式兼容
