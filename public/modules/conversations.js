@@ -402,7 +402,18 @@ export function initStorageSync() {
   window.addEventListener("storage", (e) => {
     if (e.key !== "conversations" || !e.newValue) return;
     try {
-      const incoming = JSON.parse(e.newValue);
+      const parsed = JSON.parse(e.newValue);
+
+      // 支持新的版本化格式 {version:1, data:[]} 和旧的裸数组格式
+      let incoming;
+      if (parsed && typeof parsed === "object" && "version" in parsed && "data" in parsed) {
+        incoming = parsed.data;
+      } else if (Array.isArray(parsed)) {
+        incoming = parsed; // 旧格式兼容
+      } else {
+        return; // 无效格式
+      }
+
       if (!Array.isArray(incoming)) return;
 
       // 保留当前标签页已加载的消息内容

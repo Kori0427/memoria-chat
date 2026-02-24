@@ -14,7 +14,11 @@ export function loadLocalConversations() {
       }
       // 版本不匹配，清空缓存重新从服务端拉取
       console.warn(`localStorage conversations cache version mismatch (${parsed.version} vs ${CACHE_VERSION}), cleared`);
-      localStorage.removeItem("conversations");
+      try {
+        localStorage.removeItem("conversations");
+      } catch (removeErr) {
+        console.warn("Failed to remove stale cache:", removeErr);
+      }
       return [];
     }
 
@@ -27,7 +31,12 @@ export function loadLocalConversations() {
     return [];
   } catch (err) {
     console.error("读取本地会话失败，已回退为空列表:", err);
-    localStorage.removeItem("conversations"); // 损坏的缓存直接清除
+    // 尝试清除损坏缓存，但不抛出异常（兼容 localStorage 完全不可用的环境）
+    try {
+      localStorage.removeItem("conversations");
+    } catch (removeErr) {
+      console.warn("Failed to remove corrupted cache:", removeErr);
+    }
     return [];
   }
 }

@@ -39,8 +39,9 @@ function checkMagicBytes(buf) {
     return true;
   }
 
-  // JPEG: FF D8 FF E0/E1/E2... (SOI + APP0/APP1/APP2 marker)
-  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF && buf[3] >= 0xE0 && buf[3] <= 0xEF) {
+  // JPEG: FF D8 FF XX (SOI + 常见标记：E0-EF APP, C0-CF SOF, DB DQT, DD DRI, DA SOS 等)
+  // 合法的 JPEG 第 4 字节必须是有效标记(0xC0-0xFE)，拒绝 0x00-0xBF 和 0xFF
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF && buf[3] >= 0xC0 && buf[3] !== 0xFF) {
     return true;
   }
 
