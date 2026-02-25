@@ -56,6 +56,7 @@ const diffCancelBtn = document.getElementById("diff-cancel-btn");
 let versionsLoaded = false;
 let currentDiffTs = null;
 let diffRequestSeq = 0;
+let historyRequestSeq = 0;
 
 // 滑块实时显示数值
 configTemp.addEventListener("input", () => (tempVal.textContent = configTemp.value));
@@ -467,14 +468,18 @@ function renderVersionList(versions) {
 
 async function loadVersionHistory(force = false) {
   if (versionsLoaded && !force) return;
+  const seq = ++historyRequestSeq;
   versionList.innerHTML = `<p class="version-loading">加载中...</p>`;
   try {
     const res = await apiFetch("/api/prompts/versions");
+    if (seq !== historyRequestSeq) return; // 被更新的请求取代
     if (!res.ok) throw new Error(await readErrorMessage(res));
     const versions = await res.json();
+    if (seq !== historyRequestSeq) return;
     renderVersionList(versions);
     versionsLoaded = true;
   } catch (err) {
+    if (seq !== historyRequestSeq) return;
     versionList.innerHTML = `<p class="version-empty">加载失败: ${escapeHtml(err.message)}</p>`;
   }
 }
@@ -507,12 +512,11 @@ async function restoreVersion(ts, label) {
 
     // 重新加载当前人格指令 + 记忆（同步 memoryStore 防止下次保存覆盖）
     const promptsRes = await apiFetch("/api/prompts");
-    if (promptsRes.ok) {
-      const data = await promptsRes.json();
-      editSystem.value = data.system || "";
-      if (data.memoryStore) {
-        renderMemoryList(data.memoryStore);
-      }
+    if (!promptsRes.ok) throw new Error("恢复成功但刷新数据失败，请刷新页面");
+    const data = await promptsRes.json();
+    editSystem.value = data.system || "";
+    if (data.memoryStore) {
+      renderMemoryList(data.memoryStore);
     }
 
     // 刷新版本列表
@@ -554,12 +558,21 @@ versionList.addEventListener("click", (e) => {
 function closeDiffOverlay() {
   diffOverlay.classList.add("hidden");
   currentDiffTs = null;
+  diffRequestSeq++; // 作废飞行中的 showDiff 请求
 }
 
 diffClose.addEventListener("click", closeDiffOverlay);
 diffCancelBtn.addEventListener("click", closeDiffOverlay);
 diffOverlay.addEventListener("click", (e) => {
   if (e.target === diffOverlay) closeDiffOverlay();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (!diffOverlay.classList.contains("hidden")) {
+      closeDiffOverlay();
+      e.stopPropagation();
+    }
+  }
 });
 
 // Diff overlay 恢复按钮

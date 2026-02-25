@@ -31,13 +31,22 @@ router.put("/prompts", async (req, res) => {
 
   const { system, memory, memoryStore } = validated.value;
   try {
-    // system 实际内容变更时才存版本快照（避免重复保存产生冗余版本）
+    // 内容实际变更时才存版本快照（避免重复保存产生冗余版本）
+    let needBackup = false;
     if (system !== undefined) {
       const current = await readPromptFile(SYSTEM_PATH);
-      if (system !== current) {
-        await backupPrompts();
+      if (system !== current) needBackup = true;
+    }
+    if (!needBackup && memoryStore !== undefined) {
+      const currentStore = await readMemoryStore().catch(() => null);
+      if (currentStore) {
+        // 排除 updatedAt（每次写入都会重新生成），避免误判为内容变更
+        const { updatedAt: _a, ...incoming } = memoryStore;
+        const { updatedAt: _b, ...existing } = currentStore;
+        if (JSON.stringify(incoming) !== JSON.stringify(existing)) needBackup = true;
       }
     }
+    if (needBackup) await backupPrompts();
 
     const writes = [];
     if (system !== undefined) writes.push(atomicWrite(SYSTEM_PATH, system));
@@ -76,16 +85,18 @@ router.get("/prompts/versions", async (req, res) => {
       .sort()
       .reverse(); // 最新的在前
 
-    // 去重：连续相同 system 内容的版本只保留最新的
+    // 去重：连续相同内容（system + memory）的版本只保留最新的
     const versions = [];
-    let prevSystem = null;
+    let prevKey = null;
     for (const file of files) {
       try {
         const raw = await fsp.readFile(path.join(BACKUPS_DIR, file), "utf-8");
         const data = JSON.parse(raw);
         const sys = data.system || "";
-        if (sys === prevSystem) continue; // 跳过与上一条相同的
-        prevSystem = sys;
+        const mem = data.memoryStore ? JSON.stringify(data.memoryStore) : (data.memory || "");
+        const key = sys + "\0" + mem;
+        if (key === prevKey) continue; // 跳过与上一条相同的
+        prevKey = key;
         versions.push({
           ts: file.replace(".json", ""),
           timestamp: data.timestamp,
