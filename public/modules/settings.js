@@ -55,6 +55,7 @@ const diffCancelBtn = document.getElementById("diff-cancel-btn");
 
 let versionsLoaded = false;
 let currentDiffTs = null;
+let diffRequestSeq = 0;
 
 // 滑块实时显示数值
 configTemp.addEventListener("input", () => (tempVal.textContent = configTemp.value));
@@ -479,9 +480,11 @@ async function loadVersionHistory(force = false) {
 }
 
 async function showDiff(ts) {
+  const seq = ++diffRequestSeq;
   try {
     const res = await apiFetch(`/api/prompts/versions/${ts}`);
     if (!res.ok) throw new Error(await readErrorMessage(res));
+    if (seq !== diffRequestSeq) return; // 被更新的请求取代，丢弃
     const version = await res.json();
 
     diffCurrent.textContent = editSystem.value || "(空)";
@@ -490,6 +493,7 @@ async function showDiff(ts) {
     currentDiffTs = ts;
     diffOverlay.classList.remove("hidden");
   } catch (err) {
+    if (seq !== diffRequestSeq) return;
     alert("加载版本详情失败: " + err.message);
   }
 }
@@ -501,11 +505,14 @@ async function restoreVersion(ts, label) {
     const res = await apiFetch(`/api/prompts/versions/${ts}/restore`, { method: "POST" });
     if (!res.ok) throw new Error(await readErrorMessage(res));
 
-    // 重新加载当前人格指令
+    // 重新加载当前人格指令 + 记忆（同步 memoryStore 防止下次保存覆盖）
     const promptsRes = await apiFetch("/api/prompts");
     if (promptsRes.ok) {
       const data = await promptsRes.json();
       editSystem.value = data.system || "";
+      if (data.memoryStore) {
+        renderMemoryList(data.memoryStore);
+      }
     }
 
     // 刷新版本列表

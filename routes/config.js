@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const { readConfig, saveConfig, backupPrompts, atomicWrite } = require("../lib/config");
 const { validateConfigPatch } = require("../lib/validators");
-const { DEFAULT_SYSTEM, DEFAULT_MEMORY_STORE, SYSTEM_PATH, readPromptFile, writeMemoryStore, renderMemoryForPrompt } = require("../lib/prompts");
+const { DEFAULT_SYSTEM, DEFAULT_MEMORY_STORE, SYSTEM_PATH, writeMemoryStore, renderMemoryForPrompt } = require("../lib/prompts");
 const { withMemoryLock } = require("../lib/auto-learn");
 
 // 用户推荐默认值（恢复默认时使用，不含 model——模型始终保留用户当前选择）
@@ -34,11 +34,7 @@ router.put("/config", async (req, res) => {
 
 router.post("/settings/reset", async (req, res) => {
   try {
-    // 只在内容实际不同时才备份
-    const currentSystem = await readPromptFile(SYSTEM_PATH);
-    if (currentSystem !== "") {
-      await backupPrompts();
-    }
+    await backupPrompts();
 
     // 写入默认 prompts（人格指令清空，模板由用户自行选择插入）
     const emptyStore = { ...DEFAULT_MEMORY_STORE, updatedAt: new Date().toISOString() };
