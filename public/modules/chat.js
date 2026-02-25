@@ -34,7 +34,7 @@ function showThinkingStatus(bubble, cursor, reasoningText) {
     bubble.insertBefore(block, cursor);
   }
   const body = block.querySelector(".thinking-body");
-  body.innerHTML = renderMarkdown(reasoningText);
+  body.textContent = reasoningText;
 }
 
 function clearThinkingStatus(bubble) {

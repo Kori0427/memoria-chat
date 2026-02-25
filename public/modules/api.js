@@ -52,11 +52,114 @@ marked.setOptions({
   gfm: true,
 });
 
+// ===== 数学公式渲染（KaTeX） =====
+
+/**
+ * 从文本中提取 $$...$$ 和 $...$ 数学表达式，替换为占位符。
+ * 跳过代码块（```...```）和行内代码（`...`）内的内容。
+ */
+function extractMath(text) {
+  const mathMap = [];
+  const codeMap = [];
+  let processed = text;
+
+  // 1. 保护 fenced code blocks（```...``` 和 ~~~...~~~）
+  processed = processed.replace(/(```|~~~)[\s\S]*?\1/g, (match) => {
+    const idx = codeMap.length;
+    codeMap.push(match);
+    return `\uFFFC\uFFFC\uFFFCCODE${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 2. 保护 inline code（`...`）
+  processed = processed.replace(/`[^`]+`/g, (match) => {
+    const idx = codeMap.length;
+    codeMap.push(match);
+    return `\uFFFC\uFFFC\uFFFCCODE${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 3. 提取 \[...\] display math
+  processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (_, expr) => {
+    const idx = mathMap.length;
+    mathMap.push({ expr: expr.trim(), displayMode: true });
+    return `\uFFFC\uFFFC\uFFFCMATH${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 4. 提取 \(...\) inline math
+  processed = processed.replace(/\\\(([\s\S]+?)\\\)/g, (_, expr) => {
+    const idx = mathMap.length;
+    mathMap.push({ expr: expr.trim(), displayMode: false });
+    return `\uFFFC\uFFFC\uFFFCMATH${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 5. 提取 block math $$...$$ （可跨行）
+  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
+    const idx = mathMap.length;
+    mathMap.push({ expr: expr.trim(), displayMode: true });
+    return `\uFFFC\uFFFC\uFFFCMATH${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 6. 提取 inline math $...$
+  //    - 不匹配转义 \$ 或连续 $$
+  //    - 内容不能以空格开头/结尾（避免 "$10 + $20" 误匹配）
+  //    - 闭合 $ 后不能紧跟数字（避免价格 "$10" 误匹配）
+  processed = processed.replace(/(?<![\\\$])\$((?:[^\$\n\\]|\\.)+?)\$(?!\d)/g, (match, expr) => {
+    if (expr.startsWith(" ") || expr.endsWith(" ")) return match;
+    const idx = mathMap.length;
+    mathMap.push({ expr, displayMode: false });
+    return `\uFFFC\uFFFC\uFFFCMATH${idx}\uFFFC\uFFFC\uFFFC`;
+  });
+
+  // 7. 恢复代码块（代码内不做数学渲染）
+  processed = processed.replace(/\uFFFC\uFFFC\uFFFCCODE(\d+)\uFFFC\uFFFC\uFFFC/g, (_, idx) => codeMap[parseInt(idx)]);
+
+  return { text: processed, mathMap };
+}
+
+/**
+ * 将占位符替换为 KaTeX 渲染结果。
+ * 在 marked + DOMPurify 之后调用，KaTeX 输出绕过 sanitize（KaTeX 自身安全）。
+ */
+function escapeHtmlAttr(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function restoreMath(html, mathMap) {
+  if (!mathMap.length) return html;
+
+  return html.replace(/\uFFFC\uFFFC\uFFFCMATH(\d+)\uFFFC\uFFFC\uFFFC/g, (_, idx) => {
+    const entry = mathMap[parseInt(idx)];
+    if (!entry) return _;
+
+    // KaTeX 未加载时，回退显示原始表达式
+    if (typeof window.katex === "undefined") {
+      const escaped = escapeHtmlAttr(entry.expr);
+      const delim = entry.displayMode ? "$$" : "$";
+      return `<code>${delim}${escaped}${delim}</code>`;
+    }
+
+    try {
+      return katex.renderToString(entry.expr, {
+        displayMode: entry.displayMode,
+        throwOnError: false,
+      });
+    } catch {
+      const escaped = escapeHtmlAttr(entry.expr);
+      return `<code class="katex-error" title="${escaped}">${escaped}</code>`;
+    }
+  });
+}
+
 export function renderMarkdown(content) {
   const source = typeof content === "string" ? content : "";
-  const unsafeHtml = marked.parse(source);
+
+  // 数学公式提取（在 marked 解析前，避免反斜杠被吃掉）
+  const { text: mathProtected, mathMap } = extractMath(source);
+
+  const unsafeHtml = marked.parse(mathProtected);
+  let html;
   if (window.DOMPurify?.sanitize) {
-    return DOMPurify.sanitize(unsafeHtml, {
+    html = DOMPurify.sanitize(unsafeHtml, {
       ALLOWED_TAGS: [
         "p", "br", "h1", "h2", "h3", "h4", "h5", "h6",
         "a", "ul", "ol", "li", "blockquote", "pre", "code",
@@ -70,12 +173,18 @@ export function renderMarkdown(content) {
       ],
       ALLOW_DATA_ATTR: false,
     });
+  } else {
+    // DOMPurify 加载失败时，降级到纯文本渲染，避免 XSS。
+    // 跳过 math 渲染（KaTeX HTML 绕过 sanitize，无 DOMPurify 时不安全）
+    const escaped = document.createElement("div");
+    escaped.textContent = source;
+    return escaped.innerHTML.replace(/\n/g, "<br>");
   }
 
-  // DOMPurify 加载失败时，降级到纯文本渲染，避免 XSS。
-  const escaped = document.createElement("div");
-  escaped.textContent = source;
-  return escaped.innerHTML.replace(/\n/g, "<br>");
+  // 数学公式恢复（在 DOMPurify 之后，KaTeX 输出绕过 sanitize）
+  html = restoreMath(html, mathMap);
+
+  return html;
 }
 
 export function getApiToken() {
