@@ -15,6 +15,7 @@ import {
 } from "./modules/state.js";
 import { apiFetch } from "./modules/api.js";
 import { addImages } from "./modules/images.js";
+import { isDocumentFile, addDocument } from "./modules/files.js";
 import { sendMessage, editMessage, regenerateMessage } from "./modules/chat.js";
 import { getMessageText, ICON_COPY, ICON_CHECK } from "./modules/render.js";
 import {
@@ -71,7 +72,16 @@ batchSelectAll.addEventListener("change", () => {
 uploadBtn.addEventListener("click", () => imageInput.click());
 imageInput.addEventListener("change", (e) => {
   if (e.target.files.length > 0) {
-    addImages(Array.from(e.target.files));
+    const files = Array.from(e.target.files);
+    const images = [];
+    for (const f of files) {
+      if (isDocumentFile(f)) {
+        addDocument(f);
+      } else {
+        images.push(f);
+      }
+    }
+    if (images.length > 0) addImages(images);
     imageInput.value = "";
   }
 });
@@ -80,15 +90,20 @@ document.addEventListener("paste", (e) => {
   const items = e.clipboardData?.items;
   if (!items) return;
   const imageFiles = [];
+  let docFile = null;
   for (const item of items) {
-    if (item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (file) imageFiles.push(file);
+    const file = item.getAsFile();
+    if (!file) continue;
+    if (isDocumentFile(file)) {
+      docFile = file;
+    } else if (item.type.startsWith("image/")) {
+      imageFiles.push(file);
     }
   }
-  if (imageFiles.length > 0) {
+  if (imageFiles.length > 0 || docFile) {
     e.preventDefault();
-    addImages(imageFiles);
+    if (imageFiles.length > 0) addImages(imageFiles);
+    if (docFile) addDocument(docFile);
   }
 });
 
@@ -105,8 +120,15 @@ inputWrapper.addEventListener("dragleave", (e) => {
 inputWrapper.addEventListener("drop", (e) => {
   e.preventDefault();
   inputWrapper.classList.remove("drag-over");
-  const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-  if (files.length > 0) addImages(files);
+  const images = [];
+  for (const f of Array.from(e.dataTransfer.files)) {
+    if (isDocumentFile(f)) {
+      addDocument(f);
+    } else if (f.type.startsWith("image/")) {
+      images.push(f);
+    }
+  }
+  if (images.length > 0) addImages(images);
 });
 
 // ===== 搜索 =====

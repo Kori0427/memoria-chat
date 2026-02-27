@@ -988,6 +988,75 @@ body {
   opacity: 1;
 }
 
+/* ===== 文档预览条 ===== */
+#document-preview {
+  width: 100%;
+  padding: 6px 4px;
+}
+
+#document-preview.hidden {
+  display: none;
+}
+
+.doc-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.doc-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.doc-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.doc-meta {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.doc-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.doc-truncated {
+  color: #f59e0b;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.doc-remove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.doc-remove:hover {
+  color: #ef4444;
+}
+
 /* ===== 消息内图片 ===== */
 .message-images {
   display: flex;

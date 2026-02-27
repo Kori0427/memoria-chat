@@ -46,6 +46,7 @@ export const state = {
   currentConvId: null,
   isStreaming: false,
   pendingImages: [],
+  pendingDocument: null, // { name, text, pages, truncated, originalChars, usedChars }
   currentConfig: null,
   activeStreamAbort: null, // 当前流式请求的 AbortController
   streamAbortedBySwitch: false, // 标记是否因切换对话而中止
@@ -65,6 +66,7 @@ export const chatListEl = document.getElementById("chat-list");
 export const uploadBtn = document.getElementById("upload-btn");
 export const imageInput = document.getElementById("image-input");
 export const imagePreview = document.getElementById("image-preview");
+export const documentPreview = document.getElementById("document-preview");
 export const inputWrapper = document.getElementById("input-wrapper");
 export const modelSelector = document.getElementById("model-selector");
 export const welcomeGreetingEl = document.getElementById("welcome-greeting");

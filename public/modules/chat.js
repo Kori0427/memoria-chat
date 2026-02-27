@@ -3,6 +3,7 @@ import { apiFetch, showToast, readErrorMessage, renderMarkdown, formatMetaTime }
 import { saveConversations, createConversation, renderChatList } from "./conversations.js";
 import { renderMessages, scrollToBottom, startStreamFollow, stopStreamFollow, isNearBottom, createMsgToolbar, getMessageText } from "./render.js";
 import { renderImagePreview } from "./images.js";
+import { clearPendingDocument, renderDocumentPreview } from "./files.js";
 
 function showSearchStatus(bubble, cursor, statusText) {
   let indicator = bubble.querySelector(".search-status");
@@ -95,7 +96,8 @@ function showLearnToast(facts) {
 export async function sendMessage() {
   const text = inputEl.value.trim();
   const images = [...state.pendingImages];
-  if ((!text && images.length === 0) || state.isStreaming) return;
+  const doc = state.pendingDocument;
+  if ((!text && images.length === 0 && !doc) || state.isStreaming) return;
 
   if (!state.currentConvId) {
     createConversation();
@@ -106,12 +108,32 @@ export async function sendMessage() {
   // 构造用户消息（含时间戳）
   let userMessage;
   let outboundUserContent = null;
+
+  // 文档注入：本地存标记，outbound 发全文
+  let localText = text;
+  let outboundText = text;
+  if (doc) {
+    const marker = `📎 ${doc.name}`;
+    localText = localText ? `${marker}\n${localText}` : marker;
+    // 动态计算文档可用空间
+    // - 纯文档：validator 限制 string content ≤ 30000 字符
+    // - 图片+文档：validator 限制 multipart text part ≤ 10000 字符
+    const maxLen = images.length > 0 ? 10_000 : 30_000;
+    const prefix = `\n\n---\n📎 ${doc.name} 内容:\n`;
+    const budget = maxLen - text.length - prefix.length;
+    const docText = budget > 0 ? doc.text.slice(0, budget) : "";
+    const docBlock = prefix + docText;
+    outboundText = outboundText ? `${outboundText}${docBlock}` : docBlock.trimStart();
+  }
+
   if (images.length > 0) {
     const contentParts = [];
     const thumbnailParts = [];
-    if (text) {
-      contentParts.push({ type: "text", text });
-      thumbnailParts.push({ type: "text", text });
+    if (outboundText) {
+      contentParts.push({ type: "text", text: outboundText });
+    }
+    if (localText) {
+      thumbnailParts.push({ type: "text", text: localText });
     }
     images.forEach((img) => {
       contentParts.push({ type: "image_url", image_url: { url: img.dataUrl } });
@@ -119,13 +141,17 @@ export async function sendMessage() {
     });
     userMessage = { role: "user", content: thumbnailParts, meta: { timestamp: new Date().toISOString() } };
     outboundUserContent = contentParts;
+  } else if (doc) {
+    // 有文档但无图片：本地存 localText，outbound 发 outboundText
+    userMessage = { role: "user", content: localText, meta: { timestamp: new Date().toISOString() } };
+    outboundUserContent = outboundText;
   } else {
     userMessage = { role: "user", content: text, meta: { timestamp: new Date().toISOString() } };
   }
   conv.messages.push(userMessage);
 
   if (conv.messages.length === 1) {
-    const title = text || "图片对话";
+    const title = text || (doc ? doc.name : "图片对话");
     conv.title = title.slice(0, 30) + (title.length > 30 ? "..." : "");
     renderChatList();
   }
@@ -147,6 +173,7 @@ export async function sendMessage() {
   inputEl.value = "";
   state.pendingImages = [];
   renderImagePreview();
+  if (doc) clearPendingDocument();
   inputEl.style.height = "auto";
   inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + "px";
 
@@ -208,7 +235,7 @@ export async function streamAssistantReply(conv, outboundUserContent = null) {
       content: m.content,
     }));
 
-    // 若有完整图片内容，替换最后一条 user 消息的 content
+    // 若有完整内容（图片原图 / 文档全文），替换最后一条 user 消息的 content
     if (outboundUserContent) {
       for (let i = apiMessages.length - 1; i >= 0; i--) {
         if (apiMessages[i].role === "user") {

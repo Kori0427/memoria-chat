@@ -13,6 +13,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/api", authMiddleware);
 app.use("/images", authMiddleware, express.static(IMAGES_DIR));
 
+app.use("/api", require("./routes/files"));
 app.use("/api", require("./routes/images"));
 app.use("/api", require("./routes/prompts"));
 app.use("/api", require("./routes/config"));

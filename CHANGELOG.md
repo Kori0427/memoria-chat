@@ -2,6 +2,15 @@
 
 ## 2026-02-27
 
+### New Features
+- **文件阅读** — 支持上传 PDF / Word / TXT / Markdown / CSV / JSON 文档，AI 直接阅读讨论：
+  - **服务端解析**：pdf-parse v2 + mammoth 提取纯文本，内存中处理不落盘，三重校验（扩展名 + MIME + magic bytes）
+  - **前端交互**：点击📎按钮、拖拽或粘贴上传，输入框上方显示文档预览条（文件名、页数、字数、截断标签），支持一键移除
+  - **智能截断**：超长文档截断到 28000 字（预留 2000 给用户消息），黄色"已截断"提示
+  - **outbound 分离**：本地消息只存 `📎 filename` 标记（节省 localStorage），发送 API 时注入全文，auto-learn 从 AI 回复中正常提取记忆
+  - **图片+文档混合**：拖入多个文件时自动分流，图片走图片通道，文档走文件通道，互不干扰
+  - **安全加固**：30 秒解析超时防 PDF bomb DoS、上传请求 AbortController 防竞态、动态字符预算（图片+文档 10k / 纯文档 30k）适配 validator 限制、PDF 解析器 try/finally 保证资源释放
+
 ### Stability Fixes (Phase 0 前置债务清理)
 - **Token 认证锁修复** — 用户取消认证弹框后不再卡死，无需刷新页面即可重新输入 (`public/modules/api.js`)
 - **ResizeObserver 泄漏修复** — 短回复和切换对话时 spacer observer 保底断开，长会话不再遗留大量活跃 observer (`public/modules/chat.js`)

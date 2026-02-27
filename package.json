@@ -11,8 +11,10 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "mammoth": "^1.11.0",
     "multer": "^2.0.2",
-    "openai": "^4.82.0"
+    "openai": "^4.82.0",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "vitest": "^4.0.18"
