@@ -30,6 +30,7 @@
   - `routes/summarize.js` 的总结和融合端点改为从 `memory.json` 读取真实记忆
   - `routes/prompts.js` 的纯文本 memory 写入路径（旧客户端兼容 + 版本恢复）同步解析到 `memory.json`
   - `lib/prompts.js` 的 `migrateMemoryMd()` 新增对新格式标题（核心身份/偏好习惯/近期动态）和日期后缀格式的解析支持
+- **models.js 错误信息泄露修复** — `GET /api/models` 的 catch 块原先将 `err.message` 直接返回客户端（可能包含 API key 片段或内部 URL），改为服务端 `console.error` 记录 + 返回通用 `"Internal server error"`
 
 ### Stability Fixes (Phase 0 前置债务清理)
 - **Token 认证锁修复** — 用户取消认证弹框后不再卡死，无需刷新页面即可重新输入 (`public/modules/api.js`)

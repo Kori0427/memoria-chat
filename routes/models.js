@@ -72,7 +72,8 @@ router.get("/models", async (req, res) => {
     modelCacheTime = Date.now();
     res.json(allModels);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Failed to fetch models:", formatProviderError(err));
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
