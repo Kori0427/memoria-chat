@@ -454,6 +454,219 @@ describe('lib/prompts', () => {
     });
   });
 
+  describe('parseMemoryText', () => {
+    it('parses standard format headers (核心身份/偏好习惯/近期动态)', () => {
+      const text = '## 核心身份\n- 程序员 [2026-02-25]\n\n## 偏好习惯\n- 喜欢TypeScript [2026-02-26]\n\n## 近期动态\n- 在学Rust [2026-02-27]';
+      const result = prompts.parseMemoryText(text);
+      expect(result.identity).toHaveLength(1);
+      expect(result.identity[0]).toEqual({ text: '程序员', date: '2026-02-25', source: 'ai_inferred' });
+      expect(result.preferences).toHaveLength(1);
+      expect(result.preferences[0]).toEqual({ text: '喜欢TypeScript', date: '2026-02-26', source: 'ai_inferred' });
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toEqual({ text: '在学Rust', date: '2026-02-27', source: 'ai_inferred' });
+    });
+
+    it('parses old format headers (用户画像/长期记忆)', () => {
+      const text = '## 用户画像\n- 叫小王\n\n## 长期记忆\n- [2026-02-20] 喜欢简洁风格';
+      const result = prompts.parseMemoryText(text);
+      expect(result.identity).toHaveLength(1);
+      expect(result.identity[0].text).toBe('叫小王');
+      expect(result.identity[0].source).toBe('user_stated');
+      expect(result.preferences).toHaveLength(1);
+      expect(result.preferences[0].text).toBe('喜欢简洁风格');
+      expect(result.preferences[0].date).toBe('2026-02-20');
+      expect(result.preferences[0].source).toBe('ai_inferred');
+    });
+
+    it('puts headerless bullets into events by default', () => {
+      const text = '- 无标题的记忆\n- 另一条';
+      const result = prompts.parseMemoryText(text);
+      expect(result.events).toHaveLength(2);
+      expect(result.identity).toHaveLength(0);
+      expect(result.preferences).toHaveLength(0);
+    });
+
+    it('skips template placeholder lines', () => {
+      const text = '## 用户画像\n- （在这里写下你的基本信息）\n- (placeholder)';
+      const result = prompts.parseMemoryText(text);
+      expect(result.identity).toHaveLength(0);
+    });
+
+    it('returns empty result for empty/null input', () => {
+      expect(prompts.parseMemoryText('')).toEqual({ identity: [], preferences: [], events: [] });
+      expect(prompts.parseMemoryText(null)).toEqual({ identity: [], preferences: [], events: [] });
+    });
+
+    it('does not include id or metadata fields', () => {
+      const text = '## 核心身份\n- 测试 [2026-01-01]';
+      const result = prompts.parseMemoryText(text);
+      expect(result.identity[0]).not.toHaveProperty('id');
+      expect(result.identity[0]).not.toHaveProperty('importance');
+      expect(result.identity[0]).not.toHaveProperty('useCount');
+      expect(result.identity[0]).not.toHaveProperty('lastReferencedAt');
+    });
+  });
+
+  describe('bigramOverlap', () => {
+    it('returns 1 for identical strings', () => {
+      expect(prompts.bigramOverlap('喜欢吃辣', '喜欢吃辣')).toBe(1);
+    });
+
+    it('returns 0 for completely different strings', () => {
+      expect(prompts.bigramOverlap('你好世界', 'abcdef')).toBe(0);
+    });
+
+    it('returns 0 for empty strings', () => {
+      expect(prompts.bigramOverlap('', '你好')).toBe(0);
+      expect(prompts.bigramOverlap('你好', '')).toBe(0);
+    });
+
+    it('returns partial overlap for similar strings', () => {
+      const score = prompts.bigramOverlap('喜欢吃辣', '很喜欢吃辣的食物');
+      expect(score).toBeGreaterThan(0.3);
+      expect(score).toBeLessThan(1);
+    });
+
+    it('single char strings return 0 (no bigrams)', () => {
+      expect(prompts.bigramOverlap('a', 'a')).toBe(0);
+    });
+  });
+
+  describe('mergeTextIntoMemoryStore', () => {
+    const existingStore = {
+      version: 1,
+      identity: [
+        { id: 'm_1000000000000', text: '叫小王', date: '2026-02-20', source: 'user_stated', importance: 3, useCount: 10, lastReferencedAt: '2026-02-25T00:00:00.000Z' },
+      ],
+      preferences: [
+        { id: 'm_1000000000001', text: '喜欢简洁风格', date: '2026-02-21', source: 'ai_inferred', importance: 2, useCount: 5, lastReferencedAt: '2026-02-24T00:00:00.000Z' },
+      ],
+      events: [
+        { id: 'm_1000000000002', text: '在准备面试', date: '2026-02-23', source: 'ai_inferred', importance: 1, useCount: 2, lastReferencedAt: '2026-02-23T00:00:00.000Z' },
+      ],
+    };
+
+    it('inherits metadata for exact match entries', () => {
+      const text = '## 核心身份\n- 叫小王 [2026-02-20]\n\n## 偏好习惯\n- 喜欢简洁风格 [2026-02-21]\n\n## 近期动态\n- 在准备面试 [2026-02-23]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      expect(result.identity[0].id).toBe('m_1000000000000');
+      expect(result.identity[0].importance).toBe(3);
+      expect(result.identity[0].useCount).toBe(10);
+      expect(result.identity[0].lastReferencedAt).toBe('2026-02-25T00:00:00.000Z');
+
+      expect(result.preferences[0].id).toBe('m_1000000000001');
+      expect(result.preferences[0].importance).toBe(2);
+      expect(result.preferences[0].useCount).toBe(5);
+
+      expect(result.events[0].id).toBe('m_1000000000002');
+      expect(result.events[0].importance).toBe(1);
+      expect(result.events[0].useCount).toBe(2);
+    });
+
+    it('assigns defaults for completely new entries', () => {
+      const text = '## 核心身份\n- 全新的身份信息 [2026-02-28]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      expect(result.identity[0].id).toMatch(/^m_\d+/);
+      expect(result.identity[0].id).not.toBe('m_1000000000000');
+      expect(result.identity[0].importance).toBe(2);
+      expect(result.identity[0].useCount).toBe(0);
+      expect(result.identity[0].lastReferencedAt).toBeNull();
+    });
+
+    it('handles mixed: some matched, some new', () => {
+      const text = '## 核心身份\n- 叫小王 [2026-02-20]\n\n## 偏好习惯\n- 喜欢简洁风格 [2026-02-21]\n- 新的偏好 [2026-02-28]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      // 已有条目继承
+      expect(result.identity[0].id).toBe('m_1000000000000');
+      expect(result.identity[0].importance).toBe(3);
+      expect(result.preferences[0].id).toBe('m_1000000000001');
+      expect(result.preferences[0].useCount).toBe(5);
+
+      // 新条目默认值
+      expect(result.preferences[1].importance).toBe(2);
+      expect(result.preferences[1].useCount).toBe(0);
+    });
+
+    it('matches across categories (LLM moves event to preferences)', () => {
+      const text = '## 偏好习惯\n- 在准备面试 [2026-02-23]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      // 原本在 events，现在在 preferences，但元数据应继承
+      expect(result.preferences[0].id).toBe('m_1000000000002');
+      expect(result.preferences[0].importance).toBe(1);
+      expect(result.preferences[0].useCount).toBe(2);
+      expect(result.events).toHaveLength(0);
+    });
+
+    it('handles empty existingStore (all entries get defaults)', () => {
+      const emptyStore = { version: 1, identity: [], preferences: [], events: [] };
+      const text = '## 核心身份\n- 测试条目 [2026-02-28]';
+      const result = prompts.mergeTextIntoMemoryStore(text, emptyStore);
+
+      expect(result.identity).toHaveLength(1);
+      expect(result.identity[0].importance).toBe(2);
+      expect(result.identity[0].useCount).toBe(0);
+    });
+
+    it('prevents one-to-many matching (same old entry matched only once)', () => {
+      const text = '## 核心身份\n- 叫小王 [2026-02-20]\n- 叫小王 [2026-02-28]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      // First match inherits, second gets new ID
+      expect(result.identity[0].id).toBe('m_1000000000000');
+      expect(result.identity[1].id).not.toBe('m_1000000000000');
+      expect(result.identity[1].id).toMatch(/^m_\d+/);
+    });
+
+    it('inherits metadata for slightly reworded entries', () => {
+      // "喜欢简洁风格" → "喜欢简洁的风格" should still match (>0.5 overlap)
+      const text = '## 偏好习惯\n- 喜欢简洁的风格 [2026-02-21]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      expect(result.preferences[0].id).toBe('m_1000000000001');
+      expect(result.preferences[0].text).toBe('喜欢简洁的风格');
+      expect(result.preferences[0].useCount).toBe(5);
+    });
+
+    it('does not match when bigram overlap is exactly 0.5 (prevents false positives)', () => {
+      const store = {
+        version: 1,
+        identity: [
+          { id: 'm_1000000000000', text: '叫小王', date: '2026-02-20', source: 'user_stated', importance: 3, useCount: 10, lastReferencedAt: null },
+        ],
+        preferences: [], events: [],
+      };
+      // "叫小王" vs "叫小李": bigrams {叫小,小王} vs {叫小,小李} → overlap = 1/2 = 0.5 (exactly)
+      // Strict > 0.5 means no match — correct, these are different people
+      const text = '## 核心身份\n- 叫小李 [2026-02-20]';
+      const result = prompts.mergeTextIntoMemoryStore(text, store);
+      expect(result.identity[0].id).not.toBe('m_1000000000000');
+      expect(result.identity[0].importance).toBe(2); // defaults, not inherited
+    });
+
+    it('returns empty store when merging empty text', () => {
+      const result = prompts.mergeTextIntoMemoryStore('', existingStore);
+      expect(result.identity).toHaveLength(0);
+      expect(result.preferences).toHaveLength(0);
+      expect(result.events).toHaveLength(0);
+      expect(result).toHaveProperty('updatedAt');
+    });
+
+    it('returns valid store structure with updatedAt', () => {
+      const text = '## 核心身份\n- 测试 [2026-02-28]';
+      const result = prompts.mergeTextIntoMemoryStore(text, existingStore);
+
+      expect(result).toHaveProperty('version');
+      expect(result).toHaveProperty('updatedAt');
+      expect(result).toHaveProperty('identity');
+      expect(result).toHaveProperty('preferences');
+      expect(result).toHaveProperty('events');
+    });
+  });
+
   describe('constants', () => {
     it('DEFAULT_SYSTEM is a string (blank for new users)', () => {
       expect(typeof prompts.DEFAULT_SYSTEM).toBe('string');

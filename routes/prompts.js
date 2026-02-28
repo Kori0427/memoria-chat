@@ -1,7 +1,7 @@
 const fsp = require("fs").promises;
 const path = require("path");
 const router = require("express").Router();
-const { readPromptFile, SYSTEM_PATH, readMemoryStore, writeMemoryStore, renderMemoryForPrompt, DEFAULT_SYSTEM, SYSTEM_TEMPLATE } = require("../lib/prompts");
+const { readPromptFile, SYSTEM_PATH, readMemoryStore, writeMemoryStore, mergeTextIntoMemoryStore, renderMemoryForPrompt, DEFAULT_SYSTEM, SYSTEM_TEMPLATE } = require("../lib/prompts");
 const { validatePromptPatch } = require("../lib/validators");
 const { atomicWrite, backupPrompts } = require("../lib/config");
 const { withMemoryLock } = require("../lib/auto-learn");
@@ -38,12 +38,13 @@ router.put("/prompts", async (req, res) => {
     if (memoryStore !== undefined) {
       writes.push(withMemoryLock(() => writeMemoryStore(memoryStore)));
     } else if (memory !== undefined) {
-      // 旧客户端向后兼容：写入纯文本 memory.md，并同步解析到 memory.json
-      const { MEMORY_PATH, migrateMemoryMd, writeMemoryStore } = require("../lib/prompts");
+      // 纯文本写入：与当前 memoryStore 做 bigram 智能匹配，继承已有条目的元数据
       writes.push(withMemoryLock(async () => {
-        await atomicWrite(MEMORY_PATH, memory);
-        const store = await migrateMemoryMd();
-        await writeMemoryStore(store);
+        const currentStore = await readMemoryStore().catch(() => ({
+          version: 1, identity: [], preferences: [], events: [],
+        }));
+        const merged = mergeTextIntoMemoryStore(memory, currentStore);
+        await writeMemoryStore(merged);
       }));
     }
 

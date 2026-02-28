@@ -13,6 +13,7 @@
 - **UPDATE 元数据继承** — 记忆条目被 UPDATE 替换时，新条目继承旧条目的 `useCount` 和 `lastReferencedAt`，不再重置为零
 
 ### Bug Fixes
+- **merge-prompt 融合链路元数据丢失** — Import 融合或设置面板编辑记忆时，纯文本写入路径调用 `migrateMemoryMd()` 盲目重建，导致所有条目的 id/importance/useCount/lastReferencedAt 被重置为默认值。修复：新增 `mergeTextIntoMemoryStore()` 函数，用 bigram 相似度匹配已有条目继承元数据，未匹配的才用默认值。从 `migrateMemoryMd` 提取 `parseMemoryText()` 消除重复代码。（来源：Phase 0 已知债务）
 - **UPDATE importance 继承失效** — `parseAutoLearnOutput` 在 UPDATE 不带 `[importance:x]` 标签时硬编码返回 `importance:2`，导致 `applyMemoryOperations` 的 `??` 继承链永远走不到旧值。修复：UPDATE 不带标签时返回 `undefined`，让 `??` 链正确继承旧条目的 importance（来源：Codex Review）
 - **旧记忆 store 归一化后超限误拒** — `validateMemoryStore` 在归一化后检查 50KB 限制，新增的三个字段每条多 ~50 bytes，接近上限的旧 store 首次读取时可能超限触发重迁移丢数据。修复：改为检查原始输入大小（来源：Codex Review）
 
