@@ -2,6 +2,7 @@ const router = require("express").Router();
 const { getClientForModel, formatProviderError } = require("../lib/clients");
 const { readMemoryStore, renderMemoryWithIds } = require("../lib/prompts");
 const { isPlainObject } = require("../lib/config");
+const { isValidConvId } = require("../lib/validators");
 const {
   AUTO_LEARN_MODEL,
   AUTO_LEARN_PROMPT,
@@ -11,9 +12,9 @@ const {
 } = require("../lib/auto-learn");
 
 router.post("/memory/auto-learn", async (req, res) => {
-  const convId = req.body?.convId; // 按对话 ID 独立冷却
-  if (!tryAcquireCooldown(convId)) {
-    return res.json({ learned: [], skipped: "cooldown" });
+  const convId = req.body?.convId;
+  if (!isValidConvId(convId)) {
+    return res.status(400).json({ error: "invalid convId" });
   }
 
   const messages = req.body?.messages;
@@ -65,6 +66,11 @@ router.post("/memory/auto-learn", async (req, res) => {
 
   if (totalLength < 20) {
     return res.json({ learned: [], skipped: "too_short" });
+  }
+
+  // 冷却期检查放在所有 body 验证之后，避免畸形请求白烧冷却窗口
+  if (!tryAcquireCooldown(convId)) {
+    return res.json({ learned: [], skipped: "cooldown" });
   }
 
   try {
