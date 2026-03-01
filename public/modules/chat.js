@@ -82,8 +82,8 @@ export async function triggerAutoLearn(conv) {
 
 let _activeLearnCard = null;
 
-const OP_ICONS = { add: "+", update: "~", delete: "−" };
-const OP_LABELS = { add: "新增", update: "更新", delete: "删除" };
+const OP_ICONS = { add: "+", update: "~", delete: "−", merge: "≈" };
+const OP_LABELS = { add: "新增", update: "更新", delete: "删除", merge: "合并" };
 
 function showLearnCard(ops) {
   if (_activeLearnCard) { _activeLearnCard.remove(); _activeLearnCard = null; }
@@ -117,14 +117,15 @@ function showLearnCard(ops) {
   const detailsFrag = document.createDocumentFragment();
   for (const op of ops) {
     const row = document.createElement("div");
-    row.className = `learn-op learn-op-${op.op}`;
+    const effectiveOp = op.dedupMerge ? "merge" : op.op;
+    row.className = `learn-op learn-op-${effectiveOp}`;
     const icon = document.createElement("span");
     icon.className = "learn-op-icon";
-    icon.textContent = OP_ICONS[op.op] || "?";
+    icon.textContent = OP_ICONS[effectiveOp] || "?";
     row.appendChild(icon);
     const label = document.createElement("span");
     label.className = "learn-op-label";
-    label.textContent = OP_LABELS[op.op] || op.op;
+    label.textContent = OP_LABELS[effectiveOp] || effectiveOp;
     row.appendChild(label);
     if (op.category) {
       const cat = document.createElement("span");

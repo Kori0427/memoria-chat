@@ -121,13 +121,14 @@ router.post("/memory/auto-learn", async (req, res) => {
     const result = await applyMemoryOperations(entries);
 
     const applied = result?.appliedOps || [];
-    let addCount = 0, updateCount = 0, deleteCount = 0;
+    let addCount = 0, updateCount = 0, deleteCount = 0, mergeCount = 0;
     for (const e of applied) {
-      if (e.op === "add") addCount++;
+      if (e.dedupMerge) mergeCount++;
+      else if (e.op === "add") addCount++;
       else if (e.op === "update") updateCount++;
       else if (e.op === "delete") deleteCount++;
     }
-    console.log(`Auto-learn: +${addCount} add, ~${updateCount} update, -${deleteCount} delete`);
+    console.log(`Auto-learn: +${addCount} add, ~${updateCount} update, -${deleteCount} delete, ≈${mergeCount} merge`);
 
     const payload = { learned: applied };
     if (result?.overLimit) payload.capacityWarning = true;

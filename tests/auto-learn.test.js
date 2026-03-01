@@ -956,6 +956,82 @@ some random text`;
       expect(addOp.importance).toBe(3);
     });
 
+    // ── 去重合并 (dedup merge) ──────────────────────────
+
+    it('ADD with high overlap is auto-merged into existing entry (dedupMerge)', async () => {
+      const mod = loadAutoLearn({ OPENAI_API_KEY: 'sk-test' });
+      readMemoryStoreSpy.mockResolvedValue({
+        version: 1,
+        identity: [],
+        preferences: [{ id: 'm_1000000000000', text: '喜欢吃辣', date: '2026-01-01', source: 'ai_inferred', importance: 2, useCount: 5, lastReferencedAt: '2026-02-20T00:00:00.000Z' }],
+        events: [],
+      });
+
+      // "最喜欢吃辣" vs "喜欢吃辣": bigram overlap = 3/4 = 0.75 > 0.6
+      const result = await mod.applyMemoryOperations([
+        { op: 'add', category: 'preferences', text: '最喜欢吃辣', importance: 3 },
+      ]);
+
+      expect(writeMemoryStoreSpy).toHaveBeenCalledTimes(1);
+      const written = writeMemoryStoreSpy.mock.calls[0][0];
+      // 旧条目被替换，只剩 1 条
+      expect(written.preferences).toHaveLength(1);
+      expect(written.preferences[0].text).toBe('最喜欢吃辣');
+      expect(written.preferences[0].id).not.toBe('m_1000000000000');
+      // appliedOps 标记 dedupMerge
+      expect(result.appliedOps).toHaveLength(1);
+      expect(result.appliedOps[0].dedupMerge).toBe(true);
+      expect(result.appliedOps[0].op).toBe('update');
+      expect(result.appliedOps[0].oldId).toBe('m_1000000000000');
+      // importance 取 max(3, 2) = 3
+      expect(result.appliedOps[0].importance).toBe(3);
+    });
+
+    it('ADD with low overlap is added normally (no dedupMerge)', async () => {
+      const mod = loadAutoLearn({ OPENAI_API_KEY: 'sk-test' });
+      readMemoryStoreSpy.mockResolvedValue({
+        version: 1,
+        identity: [],
+        preferences: [{ id: 'm_1000000000000', text: '喜欢吃辣', date: '2026-01-01', source: 'ai_inferred', importance: 2 }],
+        events: [],
+      });
+
+      const result = await mod.applyMemoryOperations([
+        { op: 'add', category: 'preferences', text: '喜欢用深色主题' },
+      ]);
+
+      const written = writeMemoryStoreSpy.mock.calls[0][0];
+      expect(written.preferences).toHaveLength(2);
+      expect(result.appliedOps).toHaveLength(1);
+      expect(result.appliedOps[0].op).toBe('add');
+      expect(result.appliedOps[0].dedupMerge).toBeUndefined();
+    });
+
+    it('ADD matching entry targeted by same-batch DELETE is not deduped', async () => {
+      const mod = loadAutoLearn({ OPENAI_API_KEY: 'sk-test' });
+      readMemoryStoreSpy.mockResolvedValue({
+        version: 1,
+        identity: [],
+        preferences: [{ id: 'm_1000000000000', text: '喜欢吃辣', date: '2026-01-01', source: 'ai_inferred', importance: 2 }],
+        events: [],
+      });
+
+      // "最喜欢吃辣" would normally match "喜欢吃辣" (0.75), but m_1000000000000 is in DELETE
+      const result = await mod.applyMemoryOperations([
+        { op: 'delete', targetId: 'm_1000000000000' },
+        { op: 'add', category: 'preferences', text: '最喜欢吃辣' },
+      ]);
+
+      const written = writeMemoryStoreSpy.mock.calls[0][0];
+      // DELETE 执行 + ADD 正常新增 = 1 条
+      expect(written.preferences).toHaveLength(1);
+      expect(written.preferences[0].text).toBe('最喜欢吃辣');
+      // ADD 不应被转为 merge
+      const addOp = result.appliedOps.find(o => o.op === 'add');
+      expect(addOp).toBeDefined();
+      expect(addOp.dedupMerge).toBeUndefined();
+    });
+
     it('returns { overLimit: true } when DELETE proceeds despite 50K limit', async () => {
       const mod = loadAutoLearn({ OPENAI_API_KEY: 'sk-test' });
       const bigStore = {
@@ -979,6 +1055,109 @@ some random text`;
       expect(result.appliedOps).toHaveLength(1);
       expect(result.appliedOps[0]).toEqual({ op: 'delete', oldId: 'm_1000000000000' });
       expect(writeMemoryStoreSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── deduplicateAdds (pure function) ─────────────────────
+
+  describe('deduplicateAdds', () => {
+    const { deduplicateAdds } = require('../lib/auto-learn');
+
+    const makeStore = (items = {}) => ({
+      identity: items.identity || [],
+      preferences: items.preferences || [],
+      events: items.events || [],
+    });
+
+    it('converts ADD to UPDATE when overlap >60% in same category', () => {
+      const store = makeStore({
+        preferences: [{ id: 'm_100', text: '喜欢吃辣', importance: 2 }],
+      });
+      // "最喜欢吃辣" vs "喜欢吃辣": bigram overlap = 3/4 = 0.75 > 0.6
+      const ops = [{ op: 'add', category: 'preferences', text: '最喜欢吃辣', importance: 1 }];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].op).toBe('update');
+      expect(result[0].targetId).toBe('m_100');
+      expect(result[0]._dedupMerge).toBe(true);
+      // importance takes max(1, 2) = 2
+      expect(result[0].importance).toBe(2);
+    });
+
+    it('keeps ADD when overlap ≤60%', () => {
+      const store = makeStore({
+        preferences: [{ id: 'm_100', text: '喜欢吃辣', importance: 2 }],
+      });
+      const ops = [{ op: 'add', category: 'preferences', text: '喜欢用深色主题' }];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].op).toBe('add');
+      expect(result[0]._dedupMerge).toBeUndefined();
+    });
+
+    it('does not match across categories', () => {
+      const store = makeStore({
+        identity: [{ id: 'm_100', text: '喜欢吃辣', importance: 2 }],
+      });
+      // Same text but different category → no match
+      const ops = [{ op: 'add', category: 'preferences', text: '喜欢吃辣' }];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      expect(result[0].op).toBe('add');
+    });
+
+    it('skips entries in explicitTargetIds', () => {
+      const store = makeStore({
+        preferences: [{ id: 'm_100', text: '喜欢吃辣', importance: 2 }],
+      });
+      // Would match (0.75) but m_100 is excluded
+      const ops = [{ op: 'add', category: 'preferences', text: '最喜欢吃辣' }];
+      // m_100 is targeted by a DELETE in same batch
+      const result = deduplicateAdds(ops, store, new Set(['m_100']));
+
+      expect(result[0].op).toBe('add');
+    });
+
+    it('importance takes max of new and old', () => {
+      const store = makeStore({
+        identity: [{ id: 'm_100', text: '住在北京', importance: 3 }],
+      });
+      const ops = [{ op: 'add', category: 'identity', text: '住在北京市', importance: 1 }];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      expect(result[0].importance).toBe(3); // max(1, 3)
+    });
+
+    it('passes through non-ADD operations unchanged', () => {
+      const store = makeStore();
+      const ops = [
+        { op: 'delete', targetId: 'm_100' },
+        { op: 'update', targetId: 'm_200', category: 'identity', text: 'test' },
+      ];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      expect(result).toEqual(ops);
+    });
+
+    it('prevents two similar ADDs from matching the same existing entry', () => {
+      const store = makeStore({
+        preferences: [{ id: 'm_100', text: '喜欢吃辣', importance: 2 }],
+      });
+      // 两个 ADD 都与 "喜欢吃辣" 高度相似
+      const ops = [
+        { op: 'add', category: 'preferences', text: '最喜欢吃辣' },
+        { op: 'add', category: 'preferences', text: '很喜欢吃辣' },
+      ];
+      const result = deduplicateAdds(ops, store, new Set());
+
+      // 第一个应匹配为 merge，第二个应保持 ADD（m_100 已被占用）
+      expect(result[0].op).toBe('update');
+      expect(result[0]._dedupMerge).toBe(true);
+      expect(result[0].targetId).toBe('m_100');
+      expect(result[1].op).toBe('add');
+      expect(result[1]._dedupMerge).toBeUndefined();
     });
   });
 });

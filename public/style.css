@@ -2433,6 +2433,7 @@ body {
 .learn-op-add .learn-op-icon { background: rgba(16, 185, 129, 0.2); color: #10b981; }
 .learn-op-update .learn-op-icon { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
 .learn-op-delete .learn-op-icon { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.learn-op-merge .learn-op-icon { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
 
 .learn-op-label {
   font-weight: 500;
@@ -2442,6 +2443,7 @@ body {
 .learn-op-add .learn-op-label { color: #10b981; }
 .learn-op-update .learn-op-label { color: #f59e0b; }
 .learn-op-delete .learn-op-label { color: #ef4444; }
+.learn-op-merge .learn-op-label { color: #6366f1; }
 
 .learn-op-cat {
   background: rgba(255, 255, 255, 0.08);
