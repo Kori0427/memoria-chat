@@ -1,6 +1,7 @@
 import { state, modelSelector, inputEl, welcomeGreetingEl, getCurrentConv, randomGreeting } from "./state.js";
 import { apiFetch, readErrorMessage } from "./api.js";
 import { initImportTab } from "./import.js";
+import { CATEGORY_LABELS } from "./render.js";
 
 const settingsBtn = document.getElementById("settings-btn");
 const settingsOverlay = document.getElementById("settings-overlay");
@@ -33,6 +34,7 @@ const currentModelDisplay = document.getElementById("current-model-display");
 // 个性化控件
 const configAiName = document.getElementById("config-ai-name");
 const configUserName = document.getElementById("config-user-name");
+const showMemoryRefsCheckbox = document.getElementById("show-memory-refs");
 
 // 记忆添加控件
 const memoryAddCategory = document.getElementById("memory-add-category");
@@ -68,12 +70,6 @@ configFP.addEventListener("input", () => (fpVal.textContent = configFP.value));
 configCtx.addEventListener("input", () => (ctxVal.textContent = configCtx.value));
 
 // ===== 结构化记忆 UI =====
-
-const CATEGORY_LABELS = {
-  identity: "核心身份",
-  preferences: "偏好习惯",
-  events: "近期动态",
-};
 
 function renderMemoryList(store) {
   if (!store) return;
@@ -213,10 +209,17 @@ export async function loadConfigPanel() {
   }
 }
 
+// 记忆引用开关（localStorage，实时生效）
+showMemoryRefsCheckbox.checked = localStorage.getItem("showMemoryRefs") !== "false";
+showMemoryRefsCheckbox.addEventListener("change", () => {
+  localStorage.setItem("showMemoryRefs", showMemoryRefsCheckbox.checked ? "true" : "false");
+});
+
 // 打开设置
 settingsBtn.addEventListener("click", async () => {
   settingsOverlay.classList.remove("hidden");
   saveStatus.textContent = "";
+  showMemoryRefsCheckbox.checked = localStorage.getItem("showMemoryRefs") !== "false";
   try {
     const res = await apiFetch("/api/prompts");
     if (!res.ok) throw new Error(await readErrorMessage(res));

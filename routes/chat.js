@@ -55,7 +55,7 @@ router.post("/chat", async (req, res) => {
     res.write(`data: ${JSON.stringify({ status: "思考中..." })}\n\n`);
 
     const config = await readConfig();
-    const { prompt: systemPrompt, selectedIds } = await buildSystemPrompt(config);
+    const { prompt: systemPrompt, selectedIds, selectedSummaries } = await buildSystemPrompt(config);
     const client = getClientForModel(config.model);
 
     const baseParams = {
@@ -216,16 +216,17 @@ router.post("/chat", async (req, res) => {
     }
 
     if (!res.writableEnded) {
-      // 发送 meta 信息（token 用量 + 模型名）
-      if (totalPromptTokens > 0 || totalCompletionTokens > 0) {
-        res.write(`data: ${JSON.stringify({
-          meta: {
-            model: config.model,
-            prompt_tokens: totalPromptTokens,
-            completion_tokens: totalCompletionTokens,
-            total_tokens: totalPromptTokens + totalCompletionTokens,
-          },
-        })}\n\n`);
+      // 发送 meta 信息（token 用量 + 模型名 + 被引用记忆）
+      const hasUsage = totalPromptTokens > 0 || totalCompletionTokens > 0;
+      if (hasUsage || selectedSummaries.length > 0) {
+        const meta = { model: config.model };
+        if (hasUsage) {
+          meta.prompt_tokens = totalPromptTokens;
+          meta.completion_tokens = totalCompletionTokens;
+          meta.total_tokens = totalPromptTokens + totalCompletionTokens;
+        }
+        if (selectedSummaries.length > 0) meta.memories = selectedSummaries;
+        res.write(`data: ${JSON.stringify({ meta })}\n\n`);
       }
       res.write("data: [DONE]\n\n");
       res.end();

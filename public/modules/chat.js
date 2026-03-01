@@ -1,7 +1,7 @@
 import { state, getCurrentConv, messagesEl, inputEl, sendBtn } from "./state.js";
 import { apiFetch, showToast, readErrorMessage, renderMarkdown, formatMetaTime } from "./api.js";
 import { saveConversations, createConversation, renderChatList } from "./conversations.js";
-import { renderMessages, scrollToBottom, startStreamFollow, stopStreamFollow, isNearBottom, createMsgToolbar, getMessageText } from "./render.js";
+import { renderMessages, scrollToBottom, startStreamFollow, stopStreamFollow, isNearBottom, createMsgToolbar, getMessageText, appendMemoryIndicator } from "./render.js";
 import { renderImagePreview } from "./images.js";
 import { clearPendingDocument, renderDocumentPreview } from "./files.js";
 
@@ -452,11 +452,15 @@ export async function streamAssistantReply(conv, outboundUserContent = null) {
   metaEl.className = "message-meta";
   const timeStr = formatMetaTime(timestamp);
   if (metaInfo) {
-    metaEl.textContent = `${metaInfo.total_tokens} tokens · ${metaInfo.model} · ${timeStr}`;
+    const tokenStr = metaInfo.total_tokens ? `${metaInfo.total_tokens} tokens · ` : "";
+    metaEl.textContent = `${tokenStr}${metaInfo.model} · ${timeStr}`;
   } else {
     metaEl.textContent = timeStr;
   }
   frag.appendChild(metaEl);
+  if (metaInfo?.memories) {
+    appendMemoryIndicator(frag, metaEl, metaInfo.memories);
+  }
   assistantMsg.meta = metaInfo
     ? { ...metaInfo, timestamp }
     : { timestamp };

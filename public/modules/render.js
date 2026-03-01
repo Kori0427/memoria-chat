@@ -79,6 +79,45 @@ export function createMsgToolbar(msg, msgIndex) {
   return toolbar;
 }
 
+// ===== 记忆引用指示器 =====
+export const CATEGORY_LABELS = { identity: "核心身份", preferences: "偏好习惯", events: "近期动态" };
+const STARS = { 1: "★", 2: "★★", 3: "★★★" };
+
+export function appendMemoryIndicator(container, metaEl, memories) {
+  if (!memories || memories.length === 0) return;
+  if (localStorage.getItem("showMemoryRefs") === "false") return;
+
+  const badge = document.createElement("span");
+  badge.className = "memory-ref-badge";
+  badge.textContent = ` · 记忆 ×${memories.length}`;
+  metaEl.appendChild(badge);
+
+  const panel = document.createElement("div");
+  panel.className = "memory-ref-panel hidden";
+
+  for (const cat of ["identity", "preferences", "events"]) {
+    const items = memories.filter((m) => m.category === cat);
+    if (items.length === 0) continue;
+    const heading = document.createElement("div");
+    heading.className = "memory-ref-category";
+    heading.textContent = CATEGORY_LABELS[cat] || cat;
+    panel.appendChild(heading);
+    for (const item of items) {
+      const line = document.createElement("div");
+      line.className = "memory-ref-item";
+      line.textContent = `${STARS[item.importance] || "★★"} ${item.text}`;
+      panel.appendChild(line);
+    }
+  }
+
+  container.insertBefore(panel, metaEl.nextSibling);
+
+  badge.addEventListener("click", (e) => {
+    e.stopPropagation();
+    panel.classList.toggle("hidden");
+  });
+}
+
 export function renderMessages() {
   const conv = getCurrentConv();
   if (!conv || !conv.messages || conv.messages.length === 0) {
@@ -171,13 +210,15 @@ export function renderMessages() {
         metaEl.className = "message-meta";
         const timeStr = formatMetaTime(msg.meta.timestamp);
         if (msg.meta.model) {
-          metaEl.textContent = `${msg.meta.total_tokens} tokens · ${msg.meta.model}${timeStr ? " · " + timeStr : ""}`;
+          const tokenStr = msg.meta.total_tokens ? `${msg.meta.total_tokens} tokens · ` : "";
+          metaEl.textContent = `${tokenStr}${msg.meta.model}${timeStr ? " · " + timeStr : ""}`;
         } else if (timeStr) {
           metaEl.textContent = timeStr;
         } else if (msg.meta.elapsed) {
           metaEl.textContent = `${msg.meta.elapsed}s`;
         }
         bubble.appendChild(metaEl);
+        appendMemoryIndicator(bubble, metaEl, msg.meta.memories);
       }
     }
 

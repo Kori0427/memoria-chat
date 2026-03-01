@@ -778,4 +778,36 @@ describe('validateMessages', () => {
       ],
     });
   });
+
+  it('preserves meta and reasoning on assistant messages', () => {
+    const meta = { model: 'gpt-4o', total_tokens: 100, memories: [{ id: 'm_1', text: 'test', category: 'identity', importance: 2 }] };
+    const input = [
+      { role: 'assistant', content: 'hello', meta, reasoning: 'thinking...' },
+    ];
+    const result = validateMessages(input);
+    expect(result.ok).toBe(true);
+    expect(result.value[0].meta).toEqual(meta);
+    expect(result.value[0].reasoning).toBe('thinking...');
+  });
+
+  it('strips non-object meta and non-string reasoning', () => {
+    const input = [
+      { role: 'assistant', content: 'hello', meta: 'bad', reasoning: 123 },
+    ];
+    const result = validateMessages(input);
+    expect(result.ok).toBe(true);
+    expect(result.value[0].meta).toBeUndefined();
+    expect(result.value[0].reasoning).toBeUndefined();
+  });
+
+  it('preserves meta on multi-part assistant messages', () => {
+    const meta = { model: 'gpt-4o', total_tokens: 50 };
+    const input = [
+      { role: 'assistant', content: [{ type: 'text', text: 'hello' }], meta, reasoning: 'thinking' },
+    ];
+    const result = validateMessages(input);
+    expect(result.ok).toBe(true);
+    expect(result.value[0].meta).toEqual(meta);
+    expect(result.value[0].reasoning).toBe('thinking');
+  });
 });

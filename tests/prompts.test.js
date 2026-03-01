@@ -247,7 +247,7 @@ describe('lib/prompts', () => {
   });
 
   describe('buildSystemPrompt', () => {
-    it('returns { prompt, selectedIds } with memory and priority rules', async () => {
+    it('returns { prompt, selectedIds, selectedSummaries } with memory and priority rules', async () => {
       readFileSpy.mockImplementation((filePath) => {
         if (filePath === prompts.SYSTEM_PATH) return Promise.resolve('system');
         if (filePath === prompts.MEMORY_JSON_PATH) {
@@ -262,16 +262,23 @@ describe('lib/prompts', () => {
         return Promise.reject(new Error('unexpected path'));
       });
 
-      const { prompt, selectedIds } = await prompts.buildSystemPrompt();
+      const { prompt, selectedIds, selectedSummaries } = await prompts.buildSystemPrompt();
 
       expect(prompt).toContain('system');
       expect(prompt).toContain('# 关于用户的记忆');
       expect(prompt).toContain('memory item');
       expect(prompt).toContain('# 优先级规则');
       expect(selectedIds).toContain('m_1000000000000');
+      expect(selectedSummaries).toHaveLength(1);
+      expect(selectedSummaries[0]).toEqual({
+        id: 'm_1000000000000',
+        text: 'memory item',
+        category: 'identity',
+        importance: 2,
+      });
     });
 
-    it('returns empty selectedIds when memory store is empty', async () => {
+    it('returns empty selectedIds and selectedSummaries when memory store is empty', async () => {
       readFileSpy.mockImplementation((filePath) => {
         if (filePath === prompts.SYSTEM_PATH) return Promise.resolve('system');
         if (filePath === prompts.MEMORY_JSON_PATH) {
@@ -281,10 +288,11 @@ describe('lib/prompts', () => {
         return Promise.reject(new Error('unexpected path'));
       });
 
-      const { prompt, selectedIds } = await prompts.buildSystemPrompt();
+      const { prompt, selectedIds, selectedSummaries } = await prompts.buildSystemPrompt();
       expect(prompt).toContain('system');
       expect(prompt).toContain('输出格式规则');
       expect(selectedIds).toEqual([]);
+      expect(selectedSummaries).toEqual([]);
     });
 
     it('adds personalization when config has ai_name and user_name', async () => {
@@ -457,8 +465,8 @@ describe('lib/prompts', () => {
     });
 
     it('returns empty text and no ids for invalid store', () => {
-      expect(prompts.selectMemoryForPrompt(null)).toEqual({ text: '', selectedIds: [] });
-      expect(prompts.selectMemoryForPrompt('bad')).toEqual({ text: '', selectedIds: [] });
+      expect(prompts.selectMemoryForPrompt(null)).toEqual({ text: '', selectedIds: [], selectedSummaries: [] });
+      expect(prompts.selectMemoryForPrompt('bad')).toEqual({ text: '', selectedIds: [], selectedSummaries: [] });
     });
 
     it('uses default budget of 1500 and truncates large stores', () => {
@@ -488,6 +496,44 @@ describe('lib/prompts', () => {
       expect(prompts.selectMemoryForPrompt(store, NaN).text).toContain('叫小王');
       expect(prompts.selectMemoryForPrompt(store, -1).text).toContain('叫小王');
       expect(prompts.selectMemoryForPrompt(store, 'bad').text).toContain('叫小王');
+    });
+
+    it('returns selectedSummaries with id, text, category, importance', () => {
+      const store = {
+        version: 1,
+        identity: [mkItem('m_1000000000000', '叫小王', '2026-02-20', 'user_stated', { importance: 3 })],
+        preferences: [mkItem('m_1000000000001', '喜欢简洁风格', '2026-02-21', 'ai_inferred', { importance: 2 })],
+        events: [mkItem('m_1000000000002', '在准备面试', '2026-02-23', 'ai_inferred', { importance: 1 })],
+      };
+      const { selectedIds, selectedSummaries } = prompts.selectMemoryForPrompt(store, 9999);
+      expect(selectedSummaries).toHaveLength(3);
+      expect(selectedSummaries).toHaveLength(selectedIds.length);
+
+      expect(selectedSummaries[0]).toEqual({ id: 'm_1000000000000', text: '叫小王', category: 'identity', importance: 3 });
+      expect(selectedSummaries[1]).toEqual({ id: 'm_1000000000001', text: '喜欢简洁风格', category: 'preferences', importance: 2 });
+      // events may be reordered by score, but there's only one so it's at index 2
+      expect(selectedSummaries[2]).toEqual({ id: 'm_1000000000002', text: '在准备面试', category: 'events', importance: 1 });
+    });
+
+    it('selectedSummaries contains only 4 fields (no useCount/lastReferencedAt/date/source)', () => {
+      const store = {
+        version: 1,
+        identity: [mkItem('m_1000000000000', '叫小王', '2026-02-20', 'user_stated', {
+          importance: 3, useCount: 10, lastReferencedAt: '2026-02-28T00:00:00Z',
+        })],
+        preferences: [],
+        events: [],
+      };
+      const { selectedSummaries } = prompts.selectMemoryForPrompt(store, 9999);
+      expect(selectedSummaries).toHaveLength(1);
+      const keys = Object.keys(selectedSummaries[0]).sort();
+      expect(keys).toEqual(['category', 'id', 'importance', 'text']);
+    });
+
+    it('returns empty selectedSummaries for empty store', () => {
+      const store = { version: 1, identity: [], preferences: [], events: [] };
+      const { selectedSummaries } = prompts.selectMemoryForPrompt(store);
+      expect(selectedSummaries).toEqual([]);
     });
 
     it('includes same items as renderMemoryForPrompt when all items fit', () => {

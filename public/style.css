@@ -1723,6 +1723,23 @@ body {
   gap: 8px;
 }
 
+.toggle-row {
+  flex-direction: row;
+  align-items: center;
+}
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.toggle-row .config-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
 .config-val {
   font-family: "Consolas", "Menlo", monospace;
   font-size: 13px;
@@ -2210,6 +2227,41 @@ body {
 
 .message:hover .message-meta {
   opacity: 1;
+}
+
+/* ===== 记忆引用指示器 ===== */
+.memory-ref-badge {
+  cursor: pointer;
+  color: var(--accent);
+  transition: opacity 0.2s;
+}
+.memory-ref-badge:hover {
+  opacity: 0.8;
+}
+.memory-ref-panel {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.memory-ref-panel.hidden {
+  display: none;
+}
+.memory-ref-category {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 4px;
+  font-size: 12px;
+}
+.memory-ref-category:first-child {
+  margin-top: 0;
+}
+.memory-ref-item {
+  padding-left: 8px;
+  font-size: 13px;
 }
 
 /* ===== 思考链折叠块 ===== */
