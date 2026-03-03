@@ -277,6 +277,9 @@ function handleImportFile(file, hasImages) {
       importListSection.classList.remove("hidden");
       importResult.classList.add("hidden");
       importSummaryResult.classList.add("hidden");
+      requestAnimationFrame(() => {
+        summaryGenerateBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     };
     worker.onerror = function (err) {
       worker.terminate();
