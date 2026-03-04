@@ -2,6 +2,7 @@ const router = require("express").Router();
 const { openaiClient, arkClient, openrouterClient, formatProviderError } = require("../lib/clients");
 
 const OPENAI_ALLOW = /^(gpt-4o(-2024-(05-13|08-06|11-20))?|gpt-4\.1(-mini|-nano)?|o3(-mini)?)$/;
+const hasCustomOpenAIBase = !!(process.env.OPENAI_BASE_URL || "").trim();
 const ARK_ALLOW = ["glm", "kimi"];
 const MAX_MODELS_SCAN = 500;
 const MODEL_CACHE_TTL = 3 * 60 * 1000; // 3 分钟缓存
@@ -22,7 +23,7 @@ router.get("/models", async (req, res) => {
         let oc = 0;
         for await (const m of await openaiClient.models.list()) {
           if (++oc > MAX_MODELS_SCAN) break;
-          if (OPENAI_ALLOW.test(m.id)) {
+          if (hasCustomOpenAIBase || OPENAI_ALLOW.test(m.id)) {
             openaiModels.push(m.id);
           }
         }

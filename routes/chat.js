@@ -163,9 +163,10 @@ router.post("/chat", async (req, res) => {
         const delta = choice.delta;
         if (!delta) continue;
 
-        // 思考链（DeepSeek R1、doubao-thinking 等模型）→ 转发给前端展示
-        if (delta.reasoning_content) {
-          res.write(`data: ${JSON.stringify({ reasoning: delta.reasoning_content })}\n\n`);
+        // 思考链（DeepSeek R1、doubao-thinking、Ollama 等模型）→ 转发给前端展示
+        const thinking = delta.reasoning_content || delta.reasoning;
+        if (thinking) {
+          res.write(`data: ${JSON.stringify({ reasoning: thinking })}\n\n`);
         }
 
         // 正常内容 → 直接转发
