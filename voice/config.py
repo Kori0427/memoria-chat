@@ -15,10 +15,12 @@ _DEFAULTS = {
     "silence_duration": 1.5,
     "max_recording": 60,
     "wake_word": "hey memoria",
-    "language": "zh",
+    "language": "auto",
     "session_timeout": 30,
     "idle_remind_m": 2,
     "idle_remind_wait_s": 15,
+    "stt_provider": "local",
+    "stt_model": "small",
 }
 
 # Environment variable name → config key
@@ -35,6 +37,8 @@ _ENV_MAP = {
     "SESSION_TIMEOUT": "session_timeout",
     "IDLE_REMIND_M": "idle_remind_m",
     "IDLE_REMIND_WAIT_S": "idle_remind_wait_s",
+    "STT_PROVIDER": "stt_provider",
+    "STT_MODEL": "stt_model",
 }
 
 

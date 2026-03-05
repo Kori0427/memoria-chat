@@ -64,6 +64,7 @@ async def talk_loop() -> None:
     from audio_io import REMIND_PATTERN, BYE_PATTERN
     from memoria_client import MemoriaClient
     from session import Session
+    from stt import make_transcriber
 
     sr = cfg["sample_rate"]
     silence_ms = int(cfg["silence_duration"] * 1000)
@@ -75,6 +76,9 @@ async def talk_loop() -> None:
 
     sm = StateMachine()
     vad = SileroVAD(threshold=threshold)
+
+    # Local STT: load model once, reuse across recordings (None = API mode)
+    local_stt = make_transcriber(cfg["stt_provider"], cfg["stt_model"], language)
     client = MemoriaClient(
         base_url=cfg["memoria_url"],
         admin_token=cfg["admin_token"],
@@ -149,8 +153,11 @@ async def talk_loop() -> None:
                 print(f"[{sm.state.name}] 识别中... ({duration:.1f}s)")
 
                 try:
-                    wav_bytes = audio_io.numpy_to_wav_bytes(audio, sample_rate=sr)
-                    text = await client.transcribe(wav_bytes, language=language)
+                    if local_stt:
+                        text = await local_stt.transcribe(audio, sr=sr)
+                    else:
+                        wav_bytes = audio_io.numpy_to_wav_bytes(audio, sample_rate=sr)
+                        text = await client.transcribe(wav_bytes, language=language)
                 except Exception as e:
                     print(f"Error: STT 失败 ({e})\n")
                     sm.transition(State.IDLE)

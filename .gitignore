@@ -17,4 +17,5 @@ Memoria-Future-Vision.md
 __pycache__/
 *.pyc
 voice/venv/
+voice/.venv/
 voice/models/

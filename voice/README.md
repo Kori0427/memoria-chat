@@ -72,12 +72,24 @@ python main.py --talk
 | `VAD_THRESHOLD` | `vad_threshold` | `0.5` | 语音检测阈值 0~1 |
 | `SILENCE_DURATION` | `silence_duration` | `1.5` | 静音多久算说完（秒） |
 | `MAX_RECORDING` | `max_recording` | `60` | 录音上限（秒） |
-| `LANGUAGE` | `language` | `zh` | STT 语言（ISO 639-1） |
+| `LANGUAGE` | `language` | `auto` | STT 语言，`auto`=自动检测 |
+| `STT_PROVIDER` | `stt_provider` | `local` | `local`=faster-whisper, `local-torch`=openai-whisper+PyTorch, `api`=服务端 |
+| `STT_MODEL` | `stt_model` | `small` | Whisper 模型: tiny/base/small/medium/large-v3 |
 | `SESSION_TIMEOUT` | `session_timeout` | `30` | 对话超时（分钟），超时新建 |
 | `IDLE_REMIND_M` | `idle_remind_m` | `2` | 空闲提醒（分钟），0=禁用 |
 | `IDLE_REMIND_WAIT_S` | `idle_remind_wait_s` | `15` | 提醒后等待（秒） |
 
 > **Security**: Use environment variables for `ADMIN_TOKEN`. Never put real tokens in `config.yaml` (it's tracked by git).
+
+### AMD GPU 加速（可选）
+
+默认使用 `faster-whisper`（CPU），AMD 显卡用户可切换到 `local-torch` 获得 GPU 加速：
+
+1. 安装 AMD 驱动 Adrenalin 26.1.1+
+2. 按 [AMD 官方文档](https://rocm.docs.amd.com/) 安装 ROCm PyTorch wheels（**不要**用 pip 默认的 torch，会装成 CPU 版）
+3. 安装 openai-whisper：`pip install openai-whisper`
+4. 修改 `config.yaml`：`stt_provider: "local-torch"`
+5. 验证 GPU 识别：`python -c "import torch; print(torch.cuda.get_device_name(0))"`
 
 ## 项目结构
 
@@ -89,6 +101,7 @@ voice/
 ├── state_machine.py     # 状态机定义
 ├── audio_io.py          # 麦克风录音 + 播放 + VAD 录音 + WAV 编码
 ├── vad.py               # Silero VAD V5 ONNX 封装
+├── stt.py               # 本地 STT（faster-whisper / openai-whisper+PyTorch）
 ├── memoria_client.py    # Memoria API 异步客户端
 ├── session.py           # 会话生命周期管理
 ├── models/              # VAD 模型（自动下载，不入 git）

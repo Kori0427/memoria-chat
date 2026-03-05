@@ -4,3 +4,7 @@ pyyaml>=6.0
 onnxruntime>=1.16
 keyboard>=0.13
 httpx>=0.27
+faster-whisper>=1.1
+# Optional: for stt_provider=local-torch (AMD GPU via ROCm)
+# openai-whisper>=20231117
+# torch + torchaudio — install ROCm wheels manually, see README

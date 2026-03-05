@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-03-05
+
+### New Features — Local STT + AMD GPU acceleration
+- **本地语音识别** — 新增 faster-whisper 本地 STT 后端（`stt_provider: "local"`），无需依赖服务端 API，录音直接在本地转文字
+- **AMD GPU 加速** — 新增 openai-whisper + PyTorch 后端（`stt_provider: "local-torch"`），通过 ROCm 7.2 支持 AMD 显卡 GPU 加速
+- **自动语言检测** — 默认 `language: "auto"`，Whisper 自动识别中英文，无需手动切换
+- **STT 架构重构** — 提取 `BaseTranscriber` 基类 + 工厂函数 `make_transcriber()`，统一 faster-whisper / openai-whisper 两套后端的接口
+
 ## 2026-03-04
 
 ### New Features — Voice Plan Step 3: STT + session management + idle reminder
