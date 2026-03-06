@@ -89,7 +89,6 @@ async def _listen_and_transcribe(
     if wake_listener:
         wake_listener.pause()
     try:
-        await asyncio.to_thread(audio_io.play_tone)
         print("[LISTENING] 正在听...")
 
         vad.reset()
@@ -105,6 +104,8 @@ async def _listen_and_transcribe(
             print("(录音太短，已忽略)\n")
             return None
 
+        # Ding after recording — confirms "I heard you, processing now"
+        await asyncio.to_thread(audio_io.play_tone)
         print(f"[PROCESSING] 识别中... ({duration:.1f}s)")
         try:
             if local_stt:

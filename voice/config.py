@@ -12,7 +12,7 @@ _DEFAULTS = {
     "admin_token": "",
     "tts_voice": "alloy",
     "vad_threshold": 0.5,
-    "silence_duration": 1.5,
+    "silence_duration": 0.8,
     "max_recording": 60,
     "wake_word": "小莫",
     "trigger_mode": "keypress",

@@ -2,6 +2,12 @@
 
 ## 2026-03-06
 
+### Bug Fixes — Voice TTS playback stability
+- **修复首句突突突卡顿** — prebuffer 从 200ms 提升至 500ms，arm 条件收紧为 AND（≥2 chunks 且 ≥500ms），彻底解决网络抖动导致的句间队列饥饿
+- **修复首句变调/拉长** — 静音 keepalive 从 1e-10 改为 AC dither ±1e-4，防止 WASAPI/DAC 端点挂起后恢复变调
+- **提示音时机调整** — ding 从录音前移到录音后（STT 前），消除提示音干扰 TTS 播放的问题
+- **缩短录音后等待** — VAD silence_duration 从 1.5s 降至 0.8s，说完话后更快结束录音
+
 ### New Features — Voice Plan Step 6: Barge-in (interrupt AI while speaking)
 - **按键打断 AI** — AI 说话时按 Space 立即停止音频播放，开始录音接收新指令，无需等 AI 说完
 - **连续打断** — 支持反复 barge-in：打断→说话→AI 回复→再打断，循环不断

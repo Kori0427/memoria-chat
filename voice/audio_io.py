@@ -76,7 +76,7 @@ class TTSPlayer:
     avoiding first-sentence stutter from network jitter.
     """
 
-    def __init__(self, samplerate: int = 24000, prebuffer_ms: int = 200) -> None:
+    def __init__(self, samplerate: int = 24000, prebuffer_ms: int = 500) -> None:
         self.sr = samplerate
         self._prebuffer_frames = int(samplerate * prebuffer_ms / 1000)
         self._q: _queue_mod.Queue[np.ndarray | None] = _queue_mod.Queue(maxsize=256)
@@ -132,6 +132,8 @@ class TTSPlayer:
                 try:
                     chunk = self._q.get_nowait()
                 except _queue_mod.Empty:
+                    if i > 0:
+                        print("  [audio] queue starved mid-frame", flush=True)
                     break  # rest of buffer keeps keepalive dither
                 if chunk is None:  # end-of-response sentinel
                     self._armed = False
@@ -180,7 +182,7 @@ class TTSPlayer:
             self._queued_frames += len(a)
             self._queued_chunks += 1
             if (self._queued_chunks >= 2
-                    or self._queued_frames >= self._prebuffer_frames):
+                    and self._queued_frames >= self._prebuffer_frames):
                 self._armed = True
 
     def end_response(self) -> None:
