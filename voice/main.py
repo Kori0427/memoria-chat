@@ -129,7 +129,7 @@ async def _listen_and_transcribe(
 
 async def _do_speak(
     sm, client, session,
-    tts_voice: str, tts_speed: float,
+    tts_provider, tts_voice: str, tts_speed: float,
     triggers: list[asyncio.Event],
     space_event: asyncio.Event, wake_event: asyncio.Event,
     wake_listener,
@@ -164,6 +164,7 @@ async def _do_speak(
             client=client,
             messages=session.messages,
             cancel=pipeline_cancel,
+            tts=tts_provider,
             tts_voice=tts_voice,
             tts_speed=tts_speed,
         ))
@@ -277,6 +278,7 @@ async def talk_loop() -> None:
     from memoria_client import MemoriaClient
     from session import Session
     from stt import make_transcriber
+    from tts import make_tts
     sr = cfg["sample_rate"]
     silence_ms = int(cfg["silence_duration"] * 1000)
     max_sec = cfg["max_recording"]
@@ -298,6 +300,9 @@ async def talk_loop() -> None:
         admin_token=cfg["admin_token"],
     )
     session = Session(client, timeout_m=cfg["session_timeout"])
+
+    # TTS provider: "local" for kokoro-onnx, "api" for Memoria proxy
+    tts_provider = make_tts(cfg.get("tts_provider", "api"), client=client)
 
     # Bridge keyboard events → asyncio
     loop = asyncio.get_running_loop()
@@ -328,10 +333,11 @@ async def talk_loop() -> None:
         )
         wake_listener.start()
 
-    # Pre-warm audio player + STT model in parallel
+    # Pre-warm audio player + STT + TTS models in parallel
     warmup = [asyncio.to_thread(audio_io.get_tts_player, 24000)]
     if local_stt:
         warmup.append(asyncio.to_thread(local_stt.warm))
+    warmup.append(asyncio.to_thread(tts_provider.warm))
     await asyncio.gather(*warmup)
 
     # Build trigger list once (events don't change during the loop)
@@ -414,7 +420,7 @@ async def talk_loop() -> None:
                 sm.transition(State.SPEAKING)
                 await _do_speak(
                     sm, client, session,
-                    tts_voice, tts_speed,
+                    tts_provider, tts_voice, tts_speed,
                     triggers, space_event, wake_event,
                     wake_listener,
                     vad, sr, silence_ms, max_sec,

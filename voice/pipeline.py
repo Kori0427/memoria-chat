@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+import numpy as np
+
 import audio_io
 from memoria_client import MemoriaClient
 from sentence_buffer import SentenceBuffer
+from tts import BaseTTS
 
 
 class ChatError(Exception):
@@ -27,6 +30,7 @@ async def run_pipeline(
     client: MemoriaClient,
     messages: list[dict],
     cancel: asyncio.Event,
+    tts: BaseTTS,
     tts_voice: str = "alloy",
     tts_speed: float = 1.0,
 ) -> PipelineResult:
@@ -41,14 +45,15 @@ async def run_pipeline(
     idle), eliminating WASAPI output-start underflow.
 
     Args:
-        client: Memoria API client (provides chat_stream / text_to_speech).
+        client: Memoria API client (provides chat_stream).
         messages: Conversation history to send to /api/chat.
         cancel: Set this event to abort the pipeline (Step 6 barge-in).
-        tts_voice: OpenAI TTS voice name.
+        tts: TTS backend (local kokoro or API proxy).
+        tts_voice: TTS voice name.
         tts_speed: TTS speed multiplier (0.25–4.0).
     """
     sentence_q: asyncio.Queue[str | None] = asyncio.Queue(maxsize=10)
-    audio_q: asyncio.Queue[tuple[str, bytes] | None] = asyncio.Queue(maxsize=3)
+    audio_q: asyncio.Queue[tuple[str, np.ndarray, int] | None] = asyncio.Queue(maxsize=3)
 
     full_text_parts: list[str] = []
     played_parts: list[str] = []
@@ -94,10 +99,10 @@ async def run_pipeline(
                 if cancel.is_set():
                     break
                 try:
-                    wav = await client.text_to_speech(
+                    audio_np, sr = await tts.synthesize(
                         sentence, voice=tts_voice, speed=tts_speed,
                     )
-                    await audio_q.put((sentence, wav))
+                    await audio_q.put((sentence, audio_np, sr))
                 except Exception as exc:
                     print(f"  [TTS] 合成失败，跳过: {exc}")
         finally:
@@ -126,9 +131,8 @@ async def run_pipeline(
                     break
                 if cancel.is_set():
                     break
-                text, wav_bytes = item
+                text, audio_np, sr = item
                 try:
-                    audio_np, sr = audio_io.decode_wav_bytes(wav_bytes)
                     if sr != player.sr:
                         print(f"  [TTS] sample rate mismatch: "
                               f"got {sr}, player {player.sr}")

@@ -1,7 +1,14 @@
 const router = require("express").Router();
 const multer = require("multer");
+const OpenAI = require("openai");
 const { toFile } = require("openai");
 const clients = require("../lib/clients");
+
+// Optional dedicated TTS client (e.g. Kokoro-FastAPI at localhost:8880)
+const TTS_BASE_URL = (process.env.TTS_BASE_URL || "").trim();
+const ttsClient = TTS_BASE_URL
+  ? new OpenAI({ apiKey: process.env.TTS_API_KEY || "not-needed", baseURL: TTS_BASE_URL })
+  : null;
 
 // multer: 内存存储，25MB 上限（Whisper API 限制）
 const upload = multer({
@@ -60,8 +67,9 @@ router.post("/voice/stt", upload.single("audio"), async (req, res) => {
 
 // ===== TTS 代理：文本 → 音频 =====
 router.post("/voice/tts", async (req, res) => {
-  if (!clients.openaiClient) {
-    return res.status(503).json({ error: "TTS unavailable: OPENAI_API_KEY not configured." });
+  const client = ttsClient || clients.openaiClient;
+  if (!client) {
+    return res.status(503).json({ error: "TTS unavailable: set TTS_BASE_URL or OPENAI_API_KEY." });
   }
 
   const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
@@ -69,8 +77,9 @@ router.post("/voice/tts", async (req, res) => {
     return res.status(400).json({ error: "Text is required and must be ≤4096 characters." });
   }
 
-  const rawVoice = typeof req.body?.voice === "string" ? req.body.voice.slice(0, 20) : "alloy";
-  const voice = TTS_VOICES.has(rawVoice) ? rawVoice : "alloy";
+  const rawVoice = typeof req.body?.voice === "string" ? req.body.voice.slice(0, 40) : "alloy";
+  // Local TTS (e.g. Kokoro) has its own voice names — skip OpenAI voice validation
+  const voice = ttsClient ? rawVoice : (TTS_VOICES.has(rawVoice) ? rawVoice : "alloy");
   const speed = typeof req.body?.speed === "number" ? Math.max(0.25, Math.min(4.0, req.body.speed)) : 1.0;
 
   const abort = new AbortController();
@@ -80,9 +89,9 @@ router.post("/voice/tts", async (req, res) => {
     const format = req.body.format === "wav" ? "wav" : "mp3";
     const contentType = format === "wav" ? "audio/wav" : "audio/mpeg";
 
-    const response = await clients.openaiClient.audio.speech.create(
+    const response = await client.audio.speech.create(
       {
-        model: "tts-1",
+        model: ttsClient ? "kokoro" : "tts-1",
         input: text,
         voice,
         speed,

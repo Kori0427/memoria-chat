@@ -25,6 +25,7 @@ _DEFAULTS = {
     "stt_provider": "local",
     "stt_model": "small",
     "tts_speed": 1.0,
+    "tts_provider": "api",
 }
 
 # Environment variable name → config key
@@ -44,6 +45,7 @@ _ENV_MAP = {
     "STT_PROVIDER": "stt_provider",
     "STT_MODEL": "stt_model",
     "TTS_SPEED": "tts_speed",
+    "TTS_PROVIDER": "tts_provider",
     "TRIGGER_MODE": "trigger_mode",
     "WAKE_WORD": "wake_word",
     "WAKE_THRESHOLD": "wake_threshold",
