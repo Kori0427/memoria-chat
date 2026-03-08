@@ -254,6 +254,7 @@ def stream_record_with_vad(
     sample_rate: int = 16000,
     silence_ms: int = 800,
     max_seconds: float = 60,
+    start_timeout: float = 0,
 ) -> np.ndarray:
     """Record from mic using VAD to detect end-of-speech.
 
@@ -262,6 +263,8 @@ def stream_record_with_vad(
         sample_rate: Sample rate in Hz (must be 16000 for Silero VAD).
         silence_ms: Milliseconds of silence after speech to stop recording.
         max_seconds: Hard cap on recording length.
+        start_timeout: Max seconds to wait for speech to begin (0 = unlimited).
+                       Returns empty array if no speech detected within timeout.
 
     Returns:
         1-D float32 numpy array of the full recording.
@@ -275,10 +278,12 @@ def stream_record_with_vad(
     chunk_duration_ms = chunk_size / sample_rate * 1000  # ~32 ms
     silence_frames = int(silence_ms / chunk_duration_ms)
     max_chunks = int(max_seconds * sample_rate / chunk_size)
+    start_timeout_chunks = int(start_timeout * sample_rate / chunk_size) if start_timeout > 0 else 0
 
     chunks: list[np.ndarray] = []
     speech_started = False
     silent_count = 0
+    waited_chunks = 0
 
     with sd.InputStream(
         samplerate=sample_rate,
@@ -300,6 +305,10 @@ def stream_record_with_vad(
                 silent_count += 1
                 if silent_count >= silence_frames:
                     break
+            elif start_timeout_chunks > 0:
+                waited_chunks += 1
+                if waited_chunks >= start_timeout_chunks:
+                    return np.array([], dtype=np.float32)
 
     if not chunks:
         return np.array([], dtype=np.float32)

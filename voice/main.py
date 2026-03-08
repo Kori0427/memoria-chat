@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any
+
+
+# Farewell patterns — user says these to end conversation and enter sleep.
+_FAREWELL_RE = re.compile(
+    r"退下|没事了|没啥事|再见|拜拜|不聊了|就这样|晚安|先这样"
+    r"|下次[再聊见]|你?先?休息吧|我[去走]了"
+    r"|\bbye\b|\bgoodbye\b|\bsee you\b|\bgood\s*night\b"
+    r"|\bthat'?s?\s*all\b|\bi'?m\s*done\b|\bnothing\s*else\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -104,8 +115,13 @@ async def wait_for_trigger(
                 pass
 
 
-async def _listen_and_transcribe(lc: ListenCfg) -> str | None:
+async def _listen_and_transcribe(lc: ListenCfg, start_timeout: float = 0) -> str | None:
     """Record via VAD -> STT -> return text, or None on failure.
+
+    Args:
+        lc: Recording/STT config bundle.
+        start_timeout: Max seconds to wait for speech to begin (0 = unlimited).
+                       Returns None if no speech detected within timeout.
 
     Pauses wake_listener during recording (mic sharing).
     Uses try/finally to guarantee resume even on error.
@@ -123,6 +139,7 @@ async def _listen_and_transcribe(lc: ListenCfg) -> str | None:
             lc.vad, sample_rate=lc.sr,
             silence_ms=lc.silence_ms,
             max_seconds=lc.max_sec,
+            start_timeout=start_timeout,
         )
 
         duration = len(audio) / lc.sr
@@ -329,6 +346,7 @@ async def talk_loop() -> None:
     idle_remind_wait_s = cfg["idle_remind_wait_s"]
     tts_voice = cfg["tts_voice"]
     tts_speed = cfg.get("tts_speed", 1.0)
+    continue_timeout = cfg.get("continue_timeout", 6)
     trigger_mode = cfg.get("trigger_mode", "keypress")
     talk_key = cfg.get("talk_key", "space")
 
@@ -497,6 +515,48 @@ async def talk_loop() -> None:
                     triggers, space_event, wake_event,
                     lc,
                 )
+
+                # --- Continuous conversation (Step 7.6) ---
+                # After AI finishes, wait briefly for user to continue
+                # without requiring a new trigger (wake word / space).
+                while continue_timeout > 0 and sm.state == State.IDLE:
+                    space_event.clear()
+                    wake_event.clear()
+                    print(f"[IDLE] 等待继续对话 ({continue_timeout}s)...")
+
+                    sm.transition(State.LISTENING)
+                    text = await _listen_and_transcribe(
+                        lc, start_timeout=continue_timeout,
+                    )
+                    if text is None:
+                        sm.transition(State.IDLE)
+                        print("[IDLE] 连续对话超时，回到待唤醒")
+                        break
+
+                    # Farewell detection: only short utterances (≤15 chars)
+                    # to avoid false positives like "good night 是什么意思？"
+                    is_farewell = (
+                        len(text) <= 15
+                        and bool(_FAREWELL_RE.search(text))
+                    )
+
+                    # Process + speak (shared by normal and farewell paths)
+                    sm.transition(State.PROCESSING)
+                    await _log_and_save(session, text, lc.log_transcripts)
+                    sm.transition(State.SPEAKING)
+                    await _do_speak(
+                        sm, client, session,
+                        tts_provider, tts_voice, tts_speed,
+                        triggers, space_event, wake_event,
+                        lc,
+                    )
+
+                    if is_farewell:
+                        print("[IDLE] 用户告别，进入休眠")
+                        if sounds and sounds.has("shut_down"):
+                            await asyncio.to_thread(sounds.play, "shut_down")
+                        sm.transition(State.SLEEPING)
+                        break
 
             # ============================================================
             # SLEEPING — wait for trigger (Space / wake word) to wake up

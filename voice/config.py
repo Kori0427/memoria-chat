@@ -28,6 +28,7 @@ _DEFAULTS = {
     "tts_provider": "api",
     "talk_key": "space",
     "filler_enabled": True,
+    "continue_timeout": 6,
     "log_transcripts": False,
 }
 
@@ -55,6 +56,7 @@ _ENV_MAP = {
     "WAKE_SCORE": "wake_score",
     "TALK_KEY": "talk_key",
     "FILLER_ENABLED": "filler_enabled",
+    "CONTINUE_TIMEOUT": "continue_timeout",
     "LOG_TRANSCRIPTS": "log_transcripts",
 }
 

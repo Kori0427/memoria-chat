@@ -36,5 +36,8 @@ wake_score: 1.5              # 关键词增强分数，越大越容易通过 bea
 # --- Sound effects ---
 filler_enabled: true         # 播放音效（开机/关机/接收音等），false=静音
 
+# --- Continuous conversation (Step 7.6) ---
+continue_timeout: 6          # 秒，AI说完后等待用户继续说话的时间（0=禁用连续对话）
+
 # --- Privacy ---
 log_transcripts: true        # 是否在终端打印用户语音文本（false=只显示"已识别"）

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-08
+
+### New Features — Voice Plan Step 7.6: Continuous conversation & farewell detection
+- **连续对话模式** — AI 说完后自动等待用户继续说话（默认 6 秒），不需要重新喊唤醒词。超时无响应才退回唤醒等待状态
+- **告别检测** — 在连续对话中说"再见"、"拜拜"、"没事了"、"bye" 等，AI 回复后自动进入休眠（限短句 ≤15 字，避免误触发）
+- **配置项** — `continue_timeout`（秒），设 0 可关闭连续对话功能
+
+### Improvements
+- **VAD 启动超时** — `stream_record_with_vad` 新增 `start_timeout` 参数，连续对话等待期间若无人说话直接返回，避免录空音频
+
 ## 2026-03-07
 
 ### New Features — Voice Plan Step 7.5: Sound effects & wake response
