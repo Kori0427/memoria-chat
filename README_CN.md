@@ -94,8 +94,8 @@ Memoria 的记忆分三层，通过对话自动维护：
 
 ### 语音对话
 - **完整语音对话模式** — 点击麦克风说话，AI 语音回复，像打电话一样自然
-- **三种语音识别** — 浏览器内置（免费）、OpenAI Whisper API、本地 Whisper（`pip install faster-whisper`）
-- **两种语音合成** — Edge TTS（免费，10+ 音色）或 OpenAI TTS API
+- **灵活语音识别** — 浏览器内置（免费）、OpenAI Whisper API、Groq Whisper（免费极快）、本地 Whisper（`pip install faster-whisper`）
+- **灵活语音合成** — Edge TTS（免费，10+ 音色）、OpenAI TTS API、或任意 OpenAI 兼容 TTS 服务
 - **语音自动记忆** — 语音对话中的信息也会被自动学习，和文字聊天一致
 - **对话同步** — 语音对话自动同步到主页，完整消息记录
 - **实时音频球体** — 听说过程中的动态音频可视化
@@ -143,9 +143,12 @@ Memoria 的记忆分三层，通过对话自动维护：
 | `MODEL` | 否 | 默认模型，fallback `gpt-4o` |
 | `AUTO_LEARN_MODEL` | 否 | 自动记忆提取模型，留空自动选择 |
 | `AUTO_LEARN_COOLDOWN` | 否 | 自动记忆冷却秒数，默认 `300` |
-| `TTS_BASE_URL` | 否 | 本地 TTS 服务地址（如 Kokoro-FastAPI） |
-| `STT_BASE_URL` | 否 | 本地 Whisper 服务地址（OpenAI 兼容）；不设则用 Python CLI |
-| `WHISPER_MODEL` | 否 | 本地 Whisper 模型大小，默认 `base` |
+| `TTS_BASE_URL` | 否 | 自定义 TTS 服务地址（如 Kokoro-FastAPI），OpenAI 兼容 |
+| `TTS_API_KEY` | 否 | 自定义 TTS 服务的 API key |
+| `STT_BASE_URL` | 否 | 自定义 STT 服务地址（推荐 [Groq](https://console.groq.com/) `https://api.groq.com/openai/v1`，免费极快），OpenAI 兼容 |
+| `STT_API_KEY` | 否 | 自定义 STT 服务的 API key |
+| `STT_MODEL` | 否 | STT 模型名（如 Groq 用 `whisper-large-v3`） |
+| `WHISPER_MODEL` | 否 | 本地 Python STT 的 Whisper 模型大小，默认 `base` |
 | `PYTHON_PATH` | 否 | Python 可执行文件路径，默认 `python` / `python3` |
 
 ## 远程访问

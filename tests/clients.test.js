@@ -72,13 +72,12 @@ describe('lib/clients', () => {
       expect(openrouterClient).not.toBeNull();
     });
 
-    it('calls process.exit(1) when no API keys are configured', () => {
-      const exitSpy = vi
-        .spyOn(process, 'exit')
-        .mockImplementation(() => {});
-      loadClients({});
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      exitSpy.mockRestore();
+    it('sets hasAnyProvider to false and warns when no API keys are configured', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mod = loadClients({});
+      expect(mod.hasAnyProvider).toBe(false);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 

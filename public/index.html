@@ -447,8 +447,7 @@
               <select id="voice-stt-provider">
                 <option value="browser" data-i18n="voice_stt_browser">浏览器内置</option>
                 <option value="api" data-i18n="voice_stt_api">OpenAI Whisper API</option>
-                <option value="local" data-i18n="voice_stt_local">本地 Whisper (需 Python)</option>
-                <option value="volcengine" disabled data-i18n="voice_stt_volcengine">火山引擎 (预留)</option>
+                <option value="local" data-i18n="voice_stt_groq">Groq Whisper (免费)</option>
               </select>
             </div>
             <div class="config-section-title" data-i18n="voice_section_tts">语音合成</div>
@@ -457,7 +456,6 @@
               <select id="voice-tts-provider">
                 <option value="edge" data-i18n="voice_tts_edge">Edge TTS (免费)</option>
                 <option value="api" data-i18n="voice_tts_api">OpenAI TTS API</option>
-                <option value="volcengine" disabled data-i18n="voice_tts_volcengine">火山引擎 (预留)</option>
               </select>
             </div>
             <div class="config-row dropdown-row">
@@ -470,10 +468,6 @@
                 <span class="config-val" id="voice-speed-val">1.0</span>
               </div>
               <input type="range" id="voice-tts-speed" min="0.5" max="2.0" step="0.1" value="1.0" />
-            </div>
-            <div id="voice-clone-row" class="config-row text-input-row hidden">
-              <label data-i18n="voice_label_clone_id">声音克隆 ID</label>
-              <input type="text" id="voice-clone-id" maxlength="64" placeholder="火山引擎 Clone Voice ID" />
             </div>
           </div>
 

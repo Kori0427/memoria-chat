@@ -463,8 +463,6 @@ const voiceTtsProvider = document.getElementById("voice-tts-provider");
 const voiceTtsVoice = document.getElementById("voice-tts-voice");
 const voiceTtsSpeed = document.getElementById("voice-tts-speed");
 const voiceSpeedVal = document.getElementById("voice-speed-val");
-const voiceCloneRow = document.getElementById("voice-clone-row");
-const voiceCloneId = document.getElementById("voice-clone-id");
 
 const EDGE_VOICES = [
   { value: "zh-CN-YunxiNeural", label: "云溪 (男)" },
@@ -501,8 +499,6 @@ function _updateVoiceOptions(provider, currentVoice) {
     if (v.value === currentVoice) opt.selected = true;
     voiceTtsVoice.appendChild(opt);
   }
-  // 火山引擎 clone ID 行
-  voiceCloneRow.classList.toggle("hidden", provider !== "volcengine");
 }
 
 function _fillVoicePanel(voice) {
@@ -512,7 +508,6 @@ function _fillVoicePanel(voice) {
     voiceTtsSpeed.value = voice.tts_speed || 1.0;
     voiceSpeedVal.textContent = voiceTtsSpeed.value;
   }
-  if (voiceCloneId) voiceCloneId.value = voice.volcengine_clone_id || "";
   _updateVoiceOptions(voice.tts_provider || "edge", voice.tts_voice || "");
 }
 
@@ -522,7 +517,6 @@ function _collectVoiceConfig() {
     tts_provider: voiceTtsProvider?.value || "edge",
     tts_voice: voiceTtsVoice?.value || "",
     tts_speed: parseFloat(voiceTtsSpeed?.value || "1.0"),
-    volcengine_clone_id: voiceCloneId?.value || "",
   };
 }
 

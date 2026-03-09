@@ -33,7 +33,7 @@ import {
   initStorageSync,
 } from "./modules/conversations.js";
 
-import { applyI18n } from "./modules/i18n.js";
+import { applyI18n, t } from "./modules/i18n.js";
 import { applyPersonalization } from "./modules/settings.js";
 import { applyStoredTheme, bindThemeToggle } from "./modules/theme.js";
 applyStoredTheme();
@@ -364,4 +364,15 @@ if (voiceEntryBtn) {
   } catch (err) {
     console.error("服务器同步失败，使用本地缓存:", err);
   }
+
+  // 检查是否配置了 API Key
+  try {
+    const modelsRes = await apiFetch("/api/models");
+    if (modelsRes.ok) {
+      const models = await modelsRes.json();
+      if (Array.isArray(models) && models.length === 0) {
+        confirm(t("err_no_api_keys"));
+      }
+    }
+  } catch {}
 })();

@@ -88,8 +88,8 @@ Memoria's memory system has three tiers, automatically maintained through conver
 
 ### Voice
 - **Full voice conversation mode** — click the mic, speak, hear AI respond out loud
-- **Three STT providers** — Browser Web Speech API (free), OpenAI Whisper API, or local Whisper (`pip install faster-whisper`)
-- **Two TTS providers** — Edge TTS (free, 10+ voices) or OpenAI TTS API
+- **Flexible STT** — Browser Web Speech API (free), OpenAI Whisper API, Groq Whisper (free & fast), or local Whisper (`pip install faster-whisper`)
+- **Flexible TTS** — Edge TTS (free, 10+ voices), OpenAI TTS API, or any OpenAI-compatible TTS server
 - **Smart auto-learn** — memories are extracted from voice conversations just like text chat
 - **Conversation sync** — voice chats appear in the main page with full message history
 - **Real-time orb visualizer** — reactive audio visualization during listening and speaking
@@ -137,9 +137,12 @@ Copy `.env.example` to `.env` and fill in:
 | `MODEL` | No | Default model (fallback `gpt-4o`) |
 | `AUTO_LEARN_MODEL` | No | Model for memory extraction (auto-selected if empty) |
 | `AUTO_LEARN_COOLDOWN` | No | Memory extraction cooldown in seconds (default `300`) |
-| `TTS_BASE_URL` | No | Local TTS server (e.g. Kokoro-FastAPI) |
-| `STT_BASE_URL` | No | Local Whisper server (OpenAI-compatible); without this, local STT uses Python CLI |
-| `WHISPER_MODEL` | No | Whisper model size for local STT (default `base`) |
+| `TTS_BASE_URL` | No | Custom TTS server (e.g. Kokoro-FastAPI); OpenAI-compatible |
+| `TTS_API_KEY` | No | API key for custom TTS server |
+| `STT_BASE_URL` | No | Custom STT server (e.g. [Groq](https://console.groq.com/) `https://api.groq.com/openai/v1`); OpenAI-compatible |
+| `STT_API_KEY` | No | API key for custom STT server |
+| `STT_MODEL` | No | STT model name (e.g. `whisper-large-v3` for Groq) |
+| `WHISPER_MODEL` | No | Whisper model size for local Python STT (default `base`) |
 | `PYTHON_PATH` | No | Python executable for local Whisper (default `python` / `python3`) |
 
 ## Remote Access
