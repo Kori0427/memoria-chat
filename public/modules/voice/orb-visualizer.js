@@ -1,51 +1,78 @@
 /**
- * 球体可视化 — Canvas 2D
- * 根据状态和音量脉动的动态球体
+ * Fluid Blob Orb Visualizer — Canvas 2D
+ * Multi-layer morphing splines driven by audio volume and sine math.
  */
 
+// Define color palettes based on state. 
+// Using RGB arrays to smoothly interpolate.
 const COLORS = {
-  idle:       { main: [59, 130, 246],  glow: "rgba(59,130,246,0.3)"  },
-  listening:  { main: [34, 197, 94],   glow: "rgba(34,197,94,0.4)"   },
-  processing: { main: [245, 158, 11],  glow: "rgba(245,158,11,0.3)"  },
-  speaking:   { main: [168, 85, 247],  glow: "rgba(168,85,247,0.4)"  },
+  idle:       { base: [59, 130, 246],  glow: [14, 165, 233] },   // Blue to Sky
+  listening:  { base: [16, 185, 129],  glow: [52, 211, 153] },   // Emerald green
+  processing: { base: [245, 158, 11],  glow: [251, 191, 36] },   // Amber
+  speaking:   { base: [139, 92, 246],  glow: [168, 85, 247] },   // Violet/Purple
 };
 
-const BASE_RADIUS = 80;
-const MAX_OFFSET = 25;
-const BREATH_AMPLITUDE = 3;
-const LERP_SPEED = 0.15;
+const BASE_RADIUS = 70;
+const BREATH_SPEED = 0.0015;
+const MORPH_SPEED = 0.002;
+const LERP_SPEED = 0.08;
 
 export class OrbVisualizer {
-  /**
-   * @param {HTMLCanvasElement} canvas
-   */
   constructor(canvas) {
     this._canvas = canvas;
-    this._ctx2d = canvas.getContext("2d");
+    this._ctx = canvas.getContext("2d");
     this._state = "idle";
     this._analyser = null;
     this._analyserData = null;
-    this._currentRadius = BASE_RADIUS;
-    this._targetRadius = BASE_RADIUS;
-    this._currentColor = [...COLORS.idle.main];
-    this._targetColor = [...COLORS.idle.main];
+    
+    // Core parameters interpolated over time
+    this._currentVolume = 0;
+    this._targetVolume = 0;
+    
+    // Color interpolation
+    this._colorBase = [...COLORS.idle.base];
+    this._colorGlow = [...COLORS.idle.glow];
+    this._targetColorBase = [...COLORS.idle.base];
+    this._targetColorGlow = [...COLORS.idle.glow];
+    
     this._rafId = null;
     this._startTime = performance.now();
     this._running = false;
+    
+    // Pre-calculate geometry arrays
+    this._numPoints = 120; // Resolution of the curve
+    
+    // Setup for High DPI screens
+    this._setupCanvas();
+    this._onResize = this._setupCanvas.bind(this);
+    window.addEventListener('resize', this._onResize);
   }
 
-  /**
-   * @param {"idle"|"listening"|"processing"|"speaking"} state
-   */
+  _setupCanvas() {
+    // Handling device pixel ratio for sharp rendering
+    const dpr = window.devicePixelRatio || 1;
+    // We expect the CSS to set the actual display size, so we pull from clientWidth
+    const rect = this._canvas.getBoundingClientRect();
+    // Fallback if not mounted yet
+    const width = rect.width || this._canvas.width || 300;
+    const height = rect.height || this._canvas.height || 300;
+    
+    this._canvas.width = width * dpr;
+    this._canvas.height = height * dpr;
+    this._ctx.scale(dpr, dpr);
+    
+    this._cx = width / 2;
+    this._cy = height / 2;
+    this._cssRadiusScale = Math.min(width, height) / 350; // Scale morphing based on container
+  }
+
   setState(state) {
     this._state = state;
     const colorDef = COLORS[state] || COLORS.idle;
-    this._targetColor = [...colorDef.main];
+    this._targetColorBase = [...colorDef.base];
+    this._targetColorGlow = [...colorDef.glow];
   }
 
-  /**
-   * @param {AnalyserNode|null} analyser
-   */
   setAnalyser(analyser) {
     this._analyser = analyser;
     if (analyser) {
@@ -59,6 +86,8 @@ export class OrbVisualizer {
     if (this._running) return;
     this._running = true;
     this._startTime = performance.now();
+    // Re-ensure canvas setup in case CSS loaded late
+    this._setupCanvas();
     this._tick();
   }
 
@@ -68,6 +97,17 @@ export class OrbVisualizer {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
+    window.removeEventListener('resize', this._onResize);
+  }
+
+  _lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  _lerpColor(current, target, t) {
+    for (let i = 0; i < 3; i++) {
+      current[i] = this._lerp(current[i], target[i], t);
+    }
   }
 
   _tick() {
@@ -76,71 +116,140 @@ export class OrbVisualizer {
     this._render();
   }
 
+  _getBlobRadius(angle, time, layerOffset, volume) {
+    // Combine various sine waves based on angle and time to create organic morphing
+    // Add variations
+    let noise = (Math.sin(angle * 3 + time * MORPH_SPEED + layerOffset) + 
+                 Math.cos(angle * 5 - time * MORPH_SPEED * 0.8) +
+                 Math.sin(angle * 2 + time * MORPH_SPEED * 1.2)) / 3;
+
+    // Amplitude scales with volume. Idle has a tiny baseline amplitude
+    const baseAmplitude = this._state === 'idle' ? 4 : 8;
+    const volAmplitude = volume * 50; 
+    const amplitude = (baseAmplitude + volAmplitude) * this._cssRadiusScale;
+    
+    // Breathing effect
+    const breath = Math.sin(time * BREATH_SPEED) * (5 * this._cssRadiusScale);
+    
+    // Base radius scaled
+    const baseR = BASE_RADIUS * this._cssRadiusScale;
+    const dynamicBase = baseR + breath + (volume * 15 * this._cssRadiusScale);
+
+    return dynamicBase + noise * amplitude;
+  }
+
+  _drawBlobLayer(ctx, time, layerIndex, volume, baseColor, glowColor) {
+    const layerOffset = layerIndex * Math.PI * 0.6;
+    const phaseShift = time * 0.001 * (layerIndex % 2 === 0 ? 1 : -1);
+    
+    ctx.beginPath();
+    
+    for (let i = 0; i <= this._numPoints; i++) {
+      const angle = (i / this._numPoints) * Math.PI * 2;
+      const r = this._getBlobRadius(angle, time, layerOffset, volume);
+      
+      // Calculate x, y
+      const x = this._cx + Math.cos(angle + phaseShift) * r;
+      const y = this._cy + Math.sin(angle + phaseShift) * r;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    
+    // Fill with gradient
+    // Gradient direction slightly shifting
+    const gx1 = this._cx + Math.cos(time * 0.001 + layerOffset) * BASE_RADIUS;
+    const gy1 = this._cy + Math.sin(time * 0.001 + layerOffset) * BASE_RADIUS;
+    const gx2 = this._cx - Math.cos(time * 0.001 + layerOffset) * BASE_RADIUS;
+    const gy2 = this._cy - Math.sin(time * 0.001 + layerOffset) * BASE_RADIUS;
+    
+    const grad = ctx.createLinearGradient(gx1, gy1, gx2, gy2);
+    
+    if (layerIndex === 0) {
+      // Background large blurred blob
+      grad.addColorStop(0, `rgba(${baseColor.join(',')}, 0.2)`);
+      grad.addColorStop(1, `rgba(${glowColor.join(',')}, 0.1)`);
+      ctx.filter = `blur(${20 * this._cssRadiusScale}px)`;
+    } else if (layerIndex === 1) {
+      // Medium blob
+      grad.addColorStop(0, `rgba(${baseColor.join(',')}, 0.6)`);
+      grad.addColorStop(1, `rgba(${glowColor.join(',')}, 0.4)`);
+      ctx.filter = `blur(${8 * this._cssRadiusScale}px)`;
+    } else {
+      // Core sharp blob
+      grad.addColorStop(0, `rgba(${baseColor.join(',')}, 0.9)`);
+      grad.addColorStop(1, `rgba(${glowColor.join(',')}, 0.8)`);
+      ctx.filter = `blur(${2 * this._cssRadiusScale}px)`;
+    }
+
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.filter = 'none';
+  }
+
   _render() {
-    const ctx = this._ctx2d;
-    const w = this._canvas.width;
-    const h = this._canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
+    const ctx = this._ctx;
+    const w = this._canvas.width / (window.devicePixelRatio || 1);
+    const h = this._canvas.height / (window.devicePixelRatio || 1);
     const now = performance.now();
 
-    // 计算音量 (0~1)
-    let volume = 0;
+    // Volume processing
     if (this._analyser && this._analyserData) {
       this._analyser.getByteFrequencyData(this._analyserData);
       let sum = 0;
       for (let i = 0; i < this._analyserData.length; i++) {
         sum += this._analyserData[i];
       }
-      volume = sum / (this._analyserData.length * 255);
-    }
-
-    // 目标半径
-    if (this._state === "idle") {
-      const breathOffset = Math.sin((now - this._startTime) * 0.002) * BREATH_AMPLITUDE;
-      this._targetRadius = BASE_RADIUS + breathOffset;
+      this._targetVolume = sum / (this._analyserData.length * 255);
     } else if (this._state === "listening" && !this._analyser) {
-      // browser STT 无真实 analyser，模拟脉冲
-      const pulse = Math.sin((now - this._startTime) * 0.006) * 0.5 + 0.5;
-      this._targetRadius = BASE_RADIUS + pulse * MAX_OFFSET * 0.6;
+      // Fallback pulse for browser STT
+      this._targetVolume = Math.max(0, Math.sin(now * 0.005) * 0.5);
     } else if (this._state === "processing") {
-      // 等待中缓慢脉动
-      const pulse = Math.sin((now - this._startTime) * 0.003) * 0.3 + 0.7;
-      this._targetRadius = BASE_RADIUS + pulse * MAX_OFFSET * 0.3;
+      // Small ripples while processing
+      this._targetVolume = Math.max(0, Math.sin(now * 0.008) * 0.2);
     } else {
-      this._targetRadius = BASE_RADIUS + volume * MAX_OFFSET;
+      this._targetVolume = 0;
     }
 
-    // Lerp 半径
-    this._currentRadius += (this._targetRadius - this._currentRadius) * LERP_SPEED;
+    // Smooth volumetric interpolation
+    this._currentVolume = this._lerp(this._currentVolume, this._targetVolume, 0.2);
 
-    // Lerp 颜色
-    for (let i = 0; i < 3; i++) {
-      this._currentColor[i] += (this._targetColor[i] - this._currentColor[i]) * LERP_SPEED;
-    }
+    // Color interpolation
+    this._lerpColor(this._colorBase, this._targetColorBase, LERP_SPEED);
+    this._lerpColor(this._colorGlow, this._targetColorGlow, LERP_SPEED);
 
-    const r = Math.round(this._currentColor[0]);
-    const g = Math.round(this._currentColor[1]);
-    const b = Math.round(this._currentColor[2]);
+    // Round colors for CSS
+    const baseC = this._colorBase.map(Math.round);
+    const glowC = this._colorGlow.map(Math.round);
 
-    // 清除
+    // Clear canvas completely
     ctx.clearRect(0, 0, w, h);
 
-    // 外发光
-    ctx.save();
-    ctx.shadowColor = `rgba(${r},${g},${b},0.4)`;
-    ctx.shadowBlur = 40 + volume * 30;
+    // Enable additive blending for layers
+    ctx.globalCompositeOperation = "screen";
 
-    // 径向渐变
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, this._currentRadius);
-    gradient.addColorStop(0, `rgba(${Math.min(255, r + 60)},${Math.min(255, g + 60)},${Math.min(255, b + 60)},1)`);
-    gradient.addColorStop(0.7, `rgba(${r},${g},${b},0.9)`);
-    gradient.addColorStop(1, `rgba(${r},${g},${b},0.3)`);
+    // Draw 3 layers for organic feel
+    this._drawBlobLayer(ctx, now, 0, this._currentVolume, baseC, glowC);
+    this._drawBlobLayer(ctx, now, 1, this._currentVolume, baseC, glowC);
+    this._drawBlobLayer(ctx, now, 2, this._currentVolume, baseC, glowC);
 
+    // Reset blending
+    ctx.globalCompositeOperation = "source-over";
+    
+    // Optional: add a subtle inner highlight to the core
     ctx.beginPath();
-    ctx.arc(cx, cy, this._currentRadius, 0, Math.PI * 2);
-    ctx.fillStyle = gradient;
+    ctx.arc(this._cx - BASE_RADIUS*0.3, this._cy - BASE_RADIUS*0.3, BASE_RADIUS*0.4, 0, Math.PI*2);
+    const highlight = ctx.createRadialGradient(
+      this._cx - BASE_RADIUS*0.3, this._cy - BASE_RADIUS*0.3, 0,
+      this._cx - BASE_RADIUS*0.3, this._cy - BASE_RADIUS*0.3, BASE_RADIUS*0.4
+    );
+    highlight.addColorStop(0, `rgba(255, 255, 255, ${0.1 + this._currentVolume*0.2})`);
+    highlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = highlight;
     ctx.fill();
-    ctx.restore();
   }
 }

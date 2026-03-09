@@ -14,15 +14,44 @@ import { TtsPlayer } from "./tts-player.js";
 import { SentenceBuffer } from "./sentence-buffer.js";
 import { OrbVisualizer } from "./orb-visualizer.js";
 
-const STATES = ["idle", "starting", "listening", "processing", "speaking", "stopping"];
+const EDGE_VOICES = [
+  { value: "zh-CN-YunxiNeural", label: "云溪 (男)" },
+  { value: "zh-CN-XiaoxiaoNeural", label: "晓晓 (女)" },
+  { value: "zh-CN-YunyangNeural", label: "云扬 (男·新闻)" },
+  { value: "zh-CN-XiaoyiNeural", label: "晓伊 (女)" },
+  { value: "zh-CN-YunjianNeural", label: "云健 (男)" },
+  { value: "en-US-AndrewNeural", label: "Andrew (M)" },
+  { value: "en-US-AriaNeural", label: "Aria (F)" },
+  { value: "en-US-GuyNeural", label: "Guy (M)" },
+  { value: "en-US-JennyNeural", label: "Jenny (F)" },
+  { value: "ja-JP-NanamiNeural", label: "七海 (女)" },
+];
 
-const VOICE_SYSTEM_MSG = {
-  role: "system",
-  content:
-    "你正在语音对话中，请用口语化、简短、像真人说话的纯文本回复。" +
-    "禁止使用任何 Markdown 格式（加粗、斜体、列表、代码块、标题等）。" +
-    "不要输出代码。回复尽量简洁。",
+const API_VOICES = [
+  { value: "alloy", label: "Alloy" },
+  { value: "ash", label: "Ash" },
+  { value: "coral", label: "Coral" },
+  { value: "echo", label: "Echo" },
+  { value: "fable", label: "Fable" },
+  { value: "nova", label: "Nova" },
+  { value: "onyx", label: "Onyx" },
+  { value: "sage", label: "Sage" },
+  { value: "shimmer", label: "Shimmer" },
+];
+
+const VOICE_SYSTEM_MSGS = {
+  zh: "你正在语音对话中，请用口语化、简短、像真人说话的纯文本回复。" +
+      "禁止使用任何 Markdown 格式（加粗、斜体、列表、代码块、标题等）。" +
+      "不要输出代码。回复尽量简洁。",
+  en: "You are in a voice conversation. Reply in short, natural, spoken-style plain text. " +
+      "Do NOT use any Markdown formatting (bold, italic, lists, code blocks, headings, etc). " +
+      "Do not output code. Keep replies concise. Reply in the same language the user speaks.",
 };
+
+function getVoiceSystemMsg() {
+  const lang = document.documentElement.lang === "en" ? "en" : "zh";
+  return { role: "system", content: VOICE_SYSTEM_MSGS[lang] };
+}
 
 export class VoiceController {
   constructor() {
@@ -39,13 +68,17 @@ export class VoiceController {
     this._abortController = null;
     this._fillerBuffer = null;
     this._initialized = false;
+    this._savedCount = 0;
 
     // DOM
     this._micBtn = null;
     this._statusEl = null;
-    this._userTextEl = null;
-    this._aiTextEl = null;
-    this._modelBadge = null;
+    this._textArea = null;
+    this._currentAiBubble = null;
+    this._interimBubble = null;
+    this._modelSelect = null;
+    this._ttsSelect = null;
+    this._autoLearnTimer = null;
   }
 
   async init() {
@@ -55,16 +88,16 @@ export class VoiceController {
     // DOM 元素
     this._micBtn = document.getElementById("voice-mic-btn");
     this._statusEl = document.getElementById("voice-status");
-    this._userTextEl = document.getElementById("voice-user-text");
-    this._aiTextEl = document.getElementById("voice-ai-text");
-    this._modelBadge = document.getElementById("voice-model-badge");
+    this._textArea = document.getElementById("voice-text-area");
+    this._modelSelect = document.getElementById("voice-model-select");
+    this._ttsSelect = document.getElementById("voice-tts-select");
     const canvas = document.getElementById("voice-orb");
 
     // 球体可视化
     this._orb = new OrbVisualizer(canvas);
     this._orb.start();
 
-    // 并行加载配置和恢复对话
+    // 并行加载配置和恢复对话（不等模型列表，它要调外部 API 很慢）
     const savedConvId = sessionStorage.getItem("voice_conv_id");
     const [configResult, convResult] = await Promise.allSettled([
       apiFetch("/api/config").then(r => r.ok ? r.json() : null),
@@ -76,16 +109,22 @@ export class VoiceController {
     if (configResult.status === "fulfilled" && configResult.value) {
       this._config = configResult.value;
       this._voiceConfig = this._config.voice || {};
-    } else if (configResult.status === "rejected") {
-      console.warn("[voice] Failed to load config:", configResult.reason);
     }
 
-    // 显示模型名
-    this._modelBadge.textContent = this._config.model || "gpt-4o";
+    // 先用 config 里的模型名占位，模型列表异步加载
+    this._populateModelSelect([this._config.model || "gpt-4o"]);
+    apiFetch("/api/models").then(r => r.ok ? r.json() : null).then(models => {
+      if (models) this._populateModelSelect(models);
+    }).catch(() => {});
+
+    // 填充音色下拉框
+    this._populateTtsSelect();
 
     if (savedConvId && convResult.status === "fulfilled" && convResult.value) {
       this._conversationId = savedConvId;
       this._messages = convResult.value.messages || [];
+      this._savedCount = this._messages.length;
+      this._renderHistory();
     } else if (savedConvId && convResult.status === "rejected") {
       console.warn("[voice] Failed to load conversation:", convResult.reason);
     }
@@ -96,6 +135,9 @@ export class VoiceController {
 
     // 绑定事件
     this._micBtn.addEventListener("click", () => this._onMicClick());
+
+    this._modelSelect.addEventListener("change", () => this._onModelChange());
+    this._ttsSelect.addEventListener("change", () => this._onTtsVoiceChange());
 
     // 设置按钮 → 回主页设置
     const settingsBtn = document.getElementById("voice-settings-btn");
@@ -114,6 +156,10 @@ export class VoiceController {
       });
     }
 
+    // 离开页面时立即触发自动记忆（不走 debounce）
+    this._beforeUnloadHandler = () => this._doAutoLearn();
+    window.addEventListener("beforeunload", this._beforeUnloadHandler);
+
     // 预加载 filler sound（静默失败）
     this._loadFiller();
   }
@@ -123,17 +169,17 @@ export class VoiceController {
     const title = `${t("voice_title")} ${now.toLocaleString("zh-CN", {
       month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
     })}`;
-    const id = String(Date.now()) + String(Math.floor(Math.random() * 1000)).padStart(3, "0");
 
     try {
       const res = await apiFetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, title, messages: [] }),
+        body: JSON.stringify({ title }),
       });
       if (res.ok) {
-        this._conversationId = id;
-        sessionStorage.setItem("voice_conv_id", id);
+        const data = await res.json();
+        this._conversationId = data.id;
+        sessionStorage.setItem("voice_conv_id", data.id);
       }
     } catch (err) {
       console.error("[voice] Failed to create conversation:", err);
@@ -157,6 +203,70 @@ export class VoiceController {
       this._fillerBuffer = buf;
     } catch (err) {
       console.warn("[voice] Failed to generate filler sound:", err);
+    }
+  }
+
+  // ---- 下拉框填充 & 切换 ----
+
+  _populateModelSelect(models) {
+    this._modelSelect.innerHTML = "";
+    const current = this._config.model || "gpt-4o";
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      if (m === current) opt.selected = true;
+      this._modelSelect.appendChild(opt);
+    }
+    // 如果列表为空，至少显示当前模型
+    if (models.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = current;
+      opt.textContent = current;
+      opt.selected = true;
+      this._modelSelect.appendChild(opt);
+    }
+  }
+
+  _populateTtsSelect() {
+    const provider = this._voiceConfig.tts_provider || "edge";
+    const voices = provider === "edge" ? EDGE_VOICES : API_VOICES;
+    const currentVoice = this._voiceConfig.tts_voice || "";
+    this._ttsSelect.innerHTML = "";
+    for (const v of voices) {
+      const opt = document.createElement("option");
+      opt.value = v.value;
+      opt.textContent = v.label;
+      if (v.value === currentVoice) opt.selected = true;
+      this._ttsSelect.appendChild(opt);
+    }
+  }
+
+  async _onModelChange() {
+    const model = this._modelSelect.value;
+    this._config.model = model;
+    try {
+      await apiFetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+    } catch (err) {
+      console.warn("[voice] Failed to save model:", err);
+    }
+  }
+
+  async _onTtsVoiceChange() {
+    const voice = this._ttsSelect.value;
+    this._voiceConfig.tts_voice = voice;
+    try {
+      await apiFetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice: { ...this._voiceConfig, tts_voice: voice } }),
+      });
+    } catch (err) {
+      console.warn("[voice] Failed to save voice:", err);
     }
   }
 
@@ -280,8 +390,8 @@ export class VoiceController {
     this._setState("listening");
 
     // 设置球体可视化
-    if (provider === "api") {
-      // API 模式：有真实麦克风 analyser
+    if (provider !== "browser") {
+      // API / Local 模式：有真实麦克风 analyser
       const micAnalyser = this._audioSession.micAnalyser;
       if (micAnalyser) this._orb.setAnalyser(micAnalyser);
     }
@@ -295,6 +405,7 @@ export class VoiceController {
     }
 
     this._showUserText(text, false);
+    this._currentAiBubble = null;
     this._setState("processing");
     this._orb.setAnalyser(null);
 
@@ -333,7 +444,7 @@ export class VoiceController {
     const sentenceBuffer = new SentenceBuffer();
     const aiParts = [];
 
-    const messagesWithVoice = [VOICE_SYSTEM_MSG, ...this._messages];
+    const messagesWithVoice = [getVoiceSystemMsg(), ...this._messages];
 
     let resp;
     try {
@@ -403,22 +514,62 @@ export class VoiceController {
       this._messages.push({ role: "assistant", content: fullText });
     }
 
+    this._triggerAutoLearn();
+
     // 如果没有任何 TTS 内容（空回复），手动回到 idle
     if (!fullText && !this._ttsPlayer.playing) {
       this._setState("idle");
     }
   }
 
+  // ---- 自动记忆 ----
+
+  /** debounce 自动记忆：等对话停顿 15 秒后再触发，避免快速对话烧掉冷却期 */
+  _triggerAutoLearn() {
+    clearTimeout(this._autoLearnTimer);
+    if (!this._conversationId || this._messages.length < 4) return;
+    this._autoLearnTimer = setTimeout(() => this._doAutoLearn(), 15_000);
+  }
+
+  /** 立即执行自动记忆（beforeunload 等场景） */
+  _doAutoLearn() {
+    clearTimeout(this._autoLearnTimer);
+    if (!this._conversationId || this._messages.length < 4) return;
+    const recent = this._messages.slice(-6).map(m => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content
+        : Array.isArray(m.content)
+          ? m.content.filter(p => p.type === "text").map(p => ({ type: "text", text: p.text }))
+          : "",
+    }));
+    apiFetch("/api/memory/auto-learn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ convId: this._conversationId, messages: recent }),
+    }).then(async (res) => {
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.learned && data.learned.length > 0) {
+        this._showLearnNotification(data.learned);
+      }
+    }).catch(err => console.warn("[voice] auto-learn failed:", err));
+  }
+
   // ---- 对话持久化 ----
 
   async _saveMessages() {
     if (!this._conversationId || this._messages.length === 0) return;
+    const unsaved = this._messages.slice(this._savedCount);
+    if (unsaved.length === 0) return;
     try {
-      await apiFetch(`/api/conversations/${this._conversationId}/messages`, {
+      const res = await apiFetch(`/api/conversations/${this._conversationId}/messages`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: this._messages }),
+        body: JSON.stringify({ messages: unsaved }),
       });
+      if (res.ok) {
+        this._savedCount = this._messages.length;
+      }
     } catch (err) {
       console.warn("[voice] Failed to save messages:", err);
     }
@@ -426,36 +577,122 @@ export class VoiceController {
 
   // ---- UI 更新 ----
 
-  _showUserText(text, interim = false) {
-    if (interim) {
-      this._userTextEl.innerHTML = `<span class="voice-interim">${escapeHtml(text)}</span>`;
-    } else {
-      this._userTextEl.textContent = text;
+  _renderHistory() {
+    if (this._messages.length === 0) return;
+    for (const msg of this._messages) {
+      if (msg.role !== "user" && msg.role !== "assistant") continue;
+      const text = typeof msg.content === "string"
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? msg.content.filter(p => p.type === "text").map(p => p.text).join("")
+          : "";
+      if (!text) continue;
+      const bubble = this._addBubble(msg.role);
+      bubble.textContent = text;
     }
     this._scrollTextArea();
   }
 
-  _updateAiText(text) {
-    this._aiTextEl.textContent = text;
+  _addBubble(role) {
+    const row = document.createElement("div");
+    row.className = `voice-msg ${role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    row.appendChild(bubble);
+    this._textArea.appendChild(row);
     this._scrollTextArea();
+    return bubble;
+  }
+
+  _showUserText(text, interim = false) {
+    if (interim) {
+      // 临时识别文字：复用或创建临时气泡
+      if (!this._interimBubble) {
+        this._interimBubble = this._addBubble("user");
+        this._interimBubble.classList.add("voice-interim");
+      }
+      this._interimBubble.textContent = text;
+      this._scrollTextArea();
+    } else {
+      // 最终文字：移除临时气泡，创建正式气泡
+      if (this._interimBubble) {
+        this._interimBubble.closest(".voice-msg")?.remove();
+        this._interimBubble = null;
+      }
+      const bubble = this._addBubble("user");
+      bubble.textContent = text;
+    }
+  }
+
+  _updateAiText(text) {
+    if (!this._currentAiBubble) {
+      this._currentAiBubble = this._addBubble("assistant");
+    }
+    this._currentAiBubble.textContent = text;
+    this._scrollTextArea();
+  }
+
+  _showLearnNotification(ops) {
+    const OP_ICONS = { add: "+", update: "~", delete: "−", merge: "≈" };
+    let addUpdateCount = 0, deleteCount = 0;
+    for (const o of ops) {
+      if (o.op === "add" || o.op === "update") addUpdateCount++;
+      else if (o.op === "delete") deleteCount++;
+    }
+    const parts = [];
+    if (addUpdateCount > 0) parts.push(t("label_learned", { count: addUpdateCount }));
+    if (deleteCount > 0) parts.push(t("label_removed", { count: deleteCount }));
+
+    const row = document.createElement("div");
+    row.className = "voice-msg system";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble voice-learn-bubble";
+
+    const header = document.createElement("div");
+    header.className = "voice-learn-header";
+    header.textContent = `🧠 ${parts.join(", ")}`;
+    bubble.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "voice-learn-list";
+    for (const op of ops) {
+      const item = document.createElement("div");
+      item.className = "voice-learn-item";
+      const icon = OP_ICONS[op.dedupMerge ? "merge" : op.op] || "?";
+      item.textContent = `${icon} ${op.text || op.oldId || ""}`;
+      list.appendChild(item);
+    }
+    bubble.appendChild(list);
+    row.appendChild(bubble);
+    this._textArea.appendChild(row);
+    this._scrollTextArea();
+
+    // 8 秒后淡出移除
+    setTimeout(() => {
+      row.classList.add("voice-learn-fadeout");
+      row.addEventListener("animationend", () => row.remove());
+    }, 8000);
   }
 
   _showError(msg) {
     const errorEl = document.createElement("div");
     errorEl.className = "voice-error";
     errorEl.textContent = typeof msg === "string" ? msg : "Error";
-    this._aiTextEl.parentElement.appendChild(errorEl);
+    this._textArea.appendChild(errorEl);
     setTimeout(() => errorEl.remove(), 5000);
   }
 
   _scrollTextArea() {
-    const area = document.getElementById("voice-text-area");
-    if (area) area.scrollTop = area.scrollHeight;
+    this._textArea.scrollTop = this._textArea.scrollHeight;
   }
 
   // ---- 清理 ----
 
   destroy() {
+    clearTimeout(this._autoLearnTimer);
+    if (this._beforeUnloadHandler) {
+      window.removeEventListener("beforeunload", this._beforeUnloadHandler);
+    }
     this._sttManager?.abort();
     this._ttsPlayer?.destroy();
     this._orb?.stop();

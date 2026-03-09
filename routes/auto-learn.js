@@ -26,8 +26,8 @@ router.post("/memory/auto-learn", async (req, res) => {
     return res.status(400).json({ error: "messages required" });
   }
 
-  // 只用最后 4 条，先 slice 再校验，避免大请求白耗 CPU
-  const recentMessages = allMessages.slice(-4);
+  // 只用最后 6 条，先 slice 再校验，避免大请求白耗 CPU
+  const recentMessages = allMessages.slice(-6);
 
   const learnAllowedRoles = new Set(["user", "assistant", "system"]);
   for (let i = 0; i < recentMessages.length; i++) {
@@ -94,6 +94,21 @@ router.post("/memory/auto-learn", async (req, res) => {
       })
       .join("\n\n");
 
+    // 检测对话语言：用户消息中非 ASCII 字符占比低 → 英文为主
+    const userTexts = recentMessages
+      .filter((m) => m.role === "user")
+      .map((m) => typeof m.content === "string" ? m.content : "")
+      .join("");
+    let nonAsciiCount = 0, totalCount = 0;
+    for (const c of userTexts) {
+      totalCount++;
+      if (c.charCodeAt(0) > 127) nonAsciiCount++;
+    }
+    const nonAsciiRatio = totalCount > 0 ? nonAsciiCount / totalCount : 0;
+    const langHint = nonAsciiRatio < 0.3
+      ? "\n\n⚠️ IMPORTANT: The user is speaking English. You MUST write all memory entries in English. Do NOT translate to Chinese."
+      : "";
+
     const learnClient = getClientForModel(AUTO_LEARN_MODEL);
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 60_000);
@@ -104,7 +119,7 @@ router.post("/memory/auto-learn", async (req, res) => {
         temperature: 0.3,
         messages: [
           { role: "system", content: AUTO_LEARN_PROMPT },
-          { role: "user", content: `已有记忆：\n${currentMemory || "（空）"}\n\n---\n\n最近的对话：\n${conversationText}` },
+          { role: "user", content: `已有记忆：\n${currentMemory || "（空）"}\n\n---\n\n最近的对话：\n${conversationText}${langHint}` },
         ],
       }, { signal: abort.signal });
     } finally {

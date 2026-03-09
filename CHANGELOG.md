@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-03-09
+
+### New Features
+- **语音页自动记忆** — 语音对话中自动学习用户偏好/身份信息，紫色气泡通知已学到的内容（8 秒后淡出）
+- **本地 Whisper STT** — 语音设置中"本地 Whisper"选项现已可用，支持 `STT_BASE_URL` 对接本地 Whisper 服务器，或自动调用 Python 脚本（faster-whisper / openai-whisper 双后端）
+- **URL hash 路由** — `/#settings` 直接打开设置面板，`/#convId` 跳转指定对话
+
+### Bug Fixes
+- **语音页英文对话回中文** — 语音系统消息现根据界面语言动态切换中英文，不再硬编码中文
+- **英文对话记忆存成中文** — auto-learn 增加语言检测，英文对话强制要求 LLM 用英文记录
+- **本地 Whisper 中文乱码** — Windows 下 Python 子进程输出强制 UTF-8 编码，修复 GBK/cp936 乱码
+
+### Improvements
+- **语音自动学习节奏优化** — 从固定冷却期改为 15 秒防抖，适配语音对话的快速节奏
+- **beforeunload 监听器清理** — 语音页 destroy 时正确移除事件监听，防止泄漏
+- **异步文件写入** — 本地 STT 临时文件改用 async I/O，不阻塞事件循环
+
 ## 2026-03-08
 
 ### New Features — Voice Web Page (`/voice`)

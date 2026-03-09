@@ -13,7 +13,7 @@ import { apiFetch } from "../api.js";
 
 export class SttManager extends EventTarget {
   /**
-   * @param {"browser"|"api"} provider
+   * @param {"browser"|"api"|"local"} provider
    * @param {import("./audio-session.js").AudioSession} audioSession
    */
   constructor(provider, audioSession) {
@@ -35,7 +35,7 @@ export class SttManager extends EventTarget {
 
   /** 获取麦克风 AnalyserNode（仅 API 模式有真实音量数据） */
   get micAnalyser() {
-    return this._provider === "api" ? this._audioSession.micAnalyser : null;
+    return this._provider !== "browser" ? this._audioSession.micAnalyser : null;
   }
 
   start() {
@@ -52,7 +52,7 @@ export class SttManager extends EventTarget {
     if (!this._active) return;
     if (this._provider === "browser" && this._recognition) {
       this._recognition.stop();
-    } else if (this._mediaRecorder && this._mediaRecorder.state === "recording") {
+    } else if (this._mediaRecorder?.state === "recording") {
       this._mediaRecorder.stop();
     }
   }
@@ -72,7 +72,10 @@ export class SttManager extends EventTarget {
     this._recognition = new SR();
     this._recognition.continuous = false;
     this._recognition.interimResults = true;
-    this._recognition.lang = document.documentElement.lang === "en" ? "en-US" : "zh-CN";
+    // 默认中文，但 maxAlternatives 提高混合语言识别容错
+    const htmlLang = document.documentElement.lang;
+    this._recognition.lang = htmlLang === "en" ? "en-US" : "zh-CN";
+    this._recognition.maxAlternatives = 3;
 
     this._recognition.onresult = (e) => {
       let interimText = "";
@@ -194,6 +197,7 @@ export class SttManager extends EventTarget {
     try {
       const form = new FormData();
       form.append("audio", blob, `recording.${ext}`);
+      if (this._provider === "local") form.append("provider", "local");
       const resp = await apiFetch("/api/voice/stt", { method: "POST", body: form });
       if (!resp.ok) throw new Error(`STT failed: ${resp.status}`);
       const { text } = await resp.json();

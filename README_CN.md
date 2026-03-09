@@ -21,6 +21,7 @@ Memoria 是一个自部署的 AI 聊天客户端，核心是**持久化的结构
 | 人格版本管理 + 回滚 | **有** | 面具 | 无 | 面具 |
 | ChatGPT 数据导入 + 记忆融合 | **有** | 无 | 无 | 无 |
 | 多渠道（OpenAI / 火山引擎 / OpenRouter） | **有** | 有 | 有 | 有 |
+| 语音对话模式 | **有** | 无 | 无 | 无 |
 | 文件阅读（PDF / Word / TXT） | **有** | 插件 | 无 | 无 |
 | 联网搜索 | **有** | 插件 | 无 | 插件 |
 | 自部署，无需数据库 | **有** | 需要 DB | 桌面端 | 有 |
@@ -91,6 +92,14 @@ Memoria 的记忆分三层，通过对话自动维护：
 - **图片理解** — 支持 vision 模型
 - **文件阅读** — 拖入 PDF、Word、TXT、Markdown、CSV 或 JSON
 
+### 语音对话
+- **完整语音对话模式** — 点击麦克风说话，AI 语音回复，像打电话一样自然
+- **三种语音识别** — 浏览器内置（免费）、OpenAI Whisper API、本地 Whisper（`pip install faster-whisper`）
+- **两种语音合成** — Edge TTS（免费，10+ 音色）或 OpenAI TTS API
+- **语音自动记忆** — 语音对话中的信息也会被自动学习，和文字聊天一致
+- **对话同步** — 语音对话自动同步到主页，完整消息记录
+- **实时音频球体** — 听说过程中的动态音频可视化
+
 ### 数据管理
 - **ChatGPT 导入** — 拖入完整导出文件夹，对话、图片、记忆一起恢复和融合
 - **对话持久化** — 服务端 JSON 存储，不丢数据
@@ -134,6 +143,10 @@ Memoria 的记忆分三层，通过对话自动维护：
 | `MODEL` | 否 | 默认模型，fallback `gpt-4o` |
 | `AUTO_LEARN_MODEL` | 否 | 自动记忆提取模型，留空自动选择 |
 | `AUTO_LEARN_COOLDOWN` | 否 | 自动记忆冷却秒数，默认 `300` |
+| `TTS_BASE_URL` | 否 | 本地 TTS 服务地址（如 Kokoro-FastAPI） |
+| `STT_BASE_URL` | 否 | 本地 Whisper 服务地址（OpenAI 兼容）；不设则用 Python CLI |
+| `WHISPER_MODEL` | 否 | 本地 Whisper 模型大小，默认 `base` |
+| `PYTHON_PATH` | 否 | Python 可执行文件路径，默认 `python` / `python3` |
 
 ## 远程访问
 

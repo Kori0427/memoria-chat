@@ -289,10 +289,32 @@ document.addEventListener("lang-changed", () => {
 
 initStorageSync();
 renderChatList();
-if (state.conversations.length > 0) {
+
+// hash 路由
+const initHash = location.hash.slice(1);
+if (initHash === "settings") {
+  // 从 voice 页跳转 /#settings 时自动打开设置
+  history.replaceState(null, "", "/");
+  if (state.conversations.length > 0) switchConversation(state.conversations[0].id);
+  document.getElementById("settings-btn")?.click();
+} else if (initHash && state.conversations.find(c => c.id === initHash)) {
+  // 从 voice 页返回 /#convId 时切到该对话（fresh page load 会自动从服务端拉取消息）
+  history.replaceState(null, "", "/");
+  switchConversation(initHash);
+} else if (state.conversations.length > 0) {
   switchConversation(state.conversations[0].id);
 }
 inputEl.focus();
+
+// 语音入口：带上当前对话 ID
+const voiceEntryBtn = document.getElementById("voice-entry-btn");
+if (voiceEntryBtn) {
+  voiceEntryBtn.addEventListener("click", () => {
+    if (state.currentConvId) {
+      sessionStorage.setItem("voice_conv_id", state.currentConvId);
+    }
+  });
+}
 
 // 启动时从服务器同步对话列表
 (async function syncFromServer() {

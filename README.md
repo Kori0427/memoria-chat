@@ -21,6 +21,7 @@ Most AI chat clients let you talk to models. Memoria lets you **build a relation
 | Persona versioning & rollback | **Yes** | Masks | No | Masks |
 | ChatGPT data import with memory fusion | **Yes** | No | No | No |
 | Multi-provider (OpenAI / Volcengine / OpenRouter) | **Yes** | Yes | Yes | Yes |
+| Voice conversation mode | **Yes** | No | No | No |
 | File reading (PDF / Word / TXT) | **Yes** | Plugin | No | No |
 | Web search | **Yes** | Plugin | No | Plugin |
 | Self-hosted, no database | **Yes** | Needs DB | Desktop | Yes |
@@ -85,6 +86,14 @@ Memoria's memory system has three tiers, automatically maintained through conver
 - **Image understanding** for vision models
 - **File reading** — drag in PDF, Word, TXT, Markdown, CSV, or JSON
 
+### Voice
+- **Full voice conversation mode** — click the mic, speak, hear AI respond out loud
+- **Three STT providers** — Browser Web Speech API (free), OpenAI Whisper API, or local Whisper (`pip install faster-whisper`)
+- **Two TTS providers** — Edge TTS (free, 10+ voices) or OpenAI TTS API
+- **Smart auto-learn** — memories are extracted from voice conversations just like text chat
+- **Conversation sync** — voice chats appear in the main page with full message history
+- **Real-time orb visualizer** — reactive audio visualization during listening and speaking
+
 ### Data
 - **ChatGPT import** — drop your full export folder; conversations, images, and memories are restored and fused
 - **Conversation persistence** — server-side JSON, nothing is lost
@@ -128,6 +137,10 @@ Copy `.env.example` to `.env` and fill in:
 | `MODEL` | No | Default model (fallback `gpt-4o`) |
 | `AUTO_LEARN_MODEL` | No | Model for memory extraction (auto-selected if empty) |
 | `AUTO_LEARN_COOLDOWN` | No | Memory extraction cooldown in seconds (default `300`) |
+| `TTS_BASE_URL` | No | Local TTS server (e.g. Kokoro-FastAPI) |
+| `STT_BASE_URL` | No | Local Whisper server (OpenAI-compatible); without this, local STT uses Python CLI |
+| `WHISPER_MODEL` | No | Whisper model size for local STT (default `base`) |
+| `PYTHON_PATH` | No | Python executable for local Whisper (default `python` / `python3`) |
 
 ## Remote Access
 

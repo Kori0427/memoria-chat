@@ -1,5 +1,9 @@
 const router = require("express").Router();
 const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
+const { execFile } = require("child_process");
 const OpenAI = require("openai");
 const { toFile } = require("openai");
 const clients = require("../lib/clients");
@@ -9,6 +13,15 @@ const TTS_BASE_URL = (process.env.TTS_BASE_URL || "").trim();
 const ttsClient = TTS_BASE_URL
   ? new OpenAI({ apiKey: process.env.TTS_API_KEY || "not-needed", baseURL: TTS_BASE_URL })
   : null;
+
+// Optional dedicated local STT client (e.g. faster-whisper-server)
+const STT_BASE_URL = (process.env.STT_BASE_URL || "").trim();
+const localSttClient = STT_BASE_URL
+  ? new OpenAI({ apiKey: process.env.STT_API_KEY || "not-needed", baseURL: STT_BASE_URL })
+  : null;
+
+const LOCAL_STT_SCRIPT = path.join(__dirname, "..", "scripts", "local-stt.py");
+const LOCAL_STT_TIMEOUT_MS = 60_000;
 
 // multer: 内存存储，25MB 上限（Whisper API 限制）
 const upload = multer({
@@ -40,20 +53,86 @@ const EDGE_TTS_DEFAULT_VOICE = "zh-CN-YunxiNeural";
 
 // ===== STT 代理：音频 → 文本 =====
 router.post("/voice/stt", upload.single("audio"), async (req, res) => {
-  if (!clients.openaiClient) {
-    return res.status(503).json({ error: "STT unavailable: OPENAI_API_KEY not configured." });
-  }
   if (!req.file) {
     return res.status(400).json({ error: "Missing `audio` file in multipart form." });
   }
 
+  const provider = typeof req.body?.provider === "string" ? req.body.provider : "api";
   const language = typeof req.body?.language === "string" ? req.body.language.slice(0, 10) : undefined;
+
+  // ---- Local Whisper (STT_BASE_URL server or Python script) ----
+  if (provider === "local") {
+    // Prefer STT_BASE_URL (OpenAI-compatible local server)
+    if (localSttClient) {
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), LOCAL_STT_TIMEOUT_MS);
+      try {
+        const file = await toFile(req.file.buffer, req.file.originalname || "audio.webm", {
+          type: req.file.mimetype || "audio/webm",
+        });
+        const transcription = await localSttClient.audio.transcriptions.create(
+          { model: process.env.STT_MODEL || "whisper-1", file, ...(language ? { language } : {}) },
+          { signal: abort.signal }
+        );
+        return res.json({ text: transcription.text || "" });
+      } catch (err) {
+        if (err.name === "AbortError") return res.status(504).json({ error: "Local STT timed out." });
+        console.error("[voice/stt] local server error:", err);
+        return res.status(502).json({ error: `Local STT server error: ${err.message}` });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // Fallback: spawn Python script
+    const tmpFile = path.join(os.tmpdir(), `stt_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`);
+    try {
+      await fs.promises.writeFile(tmpFile, req.file.buffer);
+      const pythonCmd = process.env.PYTHON_PATH || (process.platform === "win32" ? "python" : "python3");
+      const args = [LOCAL_STT_SCRIPT, tmpFile];
+      if (process.env.WHISPER_MODEL) args.push(process.env.WHISPER_MODEL);
+      if (language) args.push(language);
+
+      const result = await new Promise((resolve, reject) => {
+        execFile(pythonCmd, args, {
+          timeout: LOCAL_STT_TIMEOUT_MS,
+          encoding: "utf8",
+          env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        }, (err, stdout, stderr) => {
+          if (err) {
+            // Try to parse stderr for structured error
+            try {
+              const errData = JSON.parse(stderr.trim());
+              return reject(new Error(errData.error || stderr));
+            } catch {
+              return reject(new Error(stderr || err.message));
+            }
+          }
+          try {
+            resolve(JSON.parse(stdout.trim()));
+          } catch {
+            reject(new Error(`Invalid output: ${stdout.slice(0, 200)}`));
+          }
+        });
+      });
+      return res.json({ text: result.text || "" });
+    } catch (err) {
+      console.error("[voice/stt] local script error:", err);
+      return res.status(502).json({ error: `Local Whisper: ${err.message}` });
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
+  }
+
+  // ---- OpenAI Whisper API (default) ----
+  if (!clients.openaiClient) {
+    return res.status(503).json({ error: "STT unavailable: OPENAI_API_KEY not configured." });
+  }
 
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), STT_TIMEOUT_MS);
 
   try {
-    // toFile: Node 18+ 兼容（不依赖全局 File，Node 20 才有）
     const file = await toFile(req.file.buffer, req.file.originalname || "audio.webm", {
       type: req.file.mimetype || "audio/webm",
     });
