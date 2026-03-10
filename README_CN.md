@@ -8,6 +8,10 @@
 
 Memoria 是一个自部署的 AI 聊天客户端，核心是**持久化的结构化记忆**。无论你切换模型、更换平台还是开新对话，你的 AI 都记得你是谁——而且越聊越懂你。
 
+<p align="center">
+  <img src="docs/hero-demo.gif" alt="Chat demo with auto-learn" width="800">
+</p>
+
 ## 为什么选 Memoria？
 
 大多数 AI 聊天客户端只是帮你调模型。Memoria 让你和 AI **建立关系**。
@@ -76,6 +80,10 @@ Memoria 的记忆分三层，通过对话自动维护：
 
 **生命周期：** 记忆可以晋升（动态 → 偏好 → 身份）、降级或衰减。不活跃的记忆会被标记为过期，低重要性的闲置记忆会被自动清理。
 
+<p align="center">
+  <img src="docs/memory-timeline.gif" alt="Memory timeline" width="800">
+</p>
+
 ## 功能特性
 
 ### 人格工程
@@ -93,6 +101,11 @@ Memoria 的记忆分三层，通过对话自动维护：
 - **文件阅读** — 拖入 PDF、Word、TXT、Markdown、CSV 或 JSON
 
 ### 语音对话
+
+<p align="center">
+  <img src="docs/voice-demo.gif" alt="Voice conversation" width="800">
+</p>
+
 - **完整语音对话模式** — 点击麦克风说话，AI 语音回复，像打电话一样自然
 - **灵活语音识别** — 浏览器内置（免费）、OpenAI Whisper API、Groq Whisper（免费极快）、本地 Whisper（`pip install faster-whisper`）
 - **灵活语音合成** — Edge TTS（免费，10+ 音色）、OpenAI TTS API、或任意 OpenAI 兼容 TTS 服务

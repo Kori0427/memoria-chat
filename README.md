@@ -8,6 +8,10 @@ Your name, your preferences, your inside jokes — gone. Every new model starts 
 
 Memoria is a self-hosted AI chat client with **persistent, structured memory**. Your AI remembers who you are across model switches, platform changes, and conversation resets — and it gets better at being *your* AI over time.
 
+<p align="center">
+  <img src="docs/hero-demo.gif" alt="Chat demo with auto-learn" width="800">
+</p>
+
 ## Why Memoria?
 
 Most AI chat clients let you talk to models. Memoria lets you **build a relationship** with one.
@@ -70,6 +74,10 @@ Memoria's memory system has three tiers, automatically maintained through conver
 
 **Lifecycle:** Memories can be promoted (events → preferences → identity), demoted, or decayed over time based on usage patterns. Stale memories are flagged; low-importance idle memories are cleaned up.
 
+<p align="center">
+  <img src="docs/memory-timeline.gif" alt="Memory timeline" width="800">
+</p>
+
 ## Features
 
 ### Persona Engine
@@ -87,6 +95,11 @@ Memoria's memory system has three tiers, automatically maintained through conver
 - **File reading** — drag in PDF, Word, TXT, Markdown, CSV, or JSON
 
 ### Voice
+
+<p align="center">
+  <img src="docs/voice-demo.gif" alt="Voice conversation" width="800">
+</p>
+
 - **Full voice conversation mode** — click the mic, speak, hear AI respond out loud
 - **Flexible STT** — Browser Web Speech API (free), OpenAI Whisper API, Groq Whisper (free & fast), or local Whisper (`pip install faster-whisper`)
 - **Flexible TTS** — Edge TTS (free, 10+ voices), OpenAI TTS API, or any OpenAI-compatible TTS server
